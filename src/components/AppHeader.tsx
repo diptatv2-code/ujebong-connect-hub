@@ -1,13 +1,15 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Bell, MessageCircle } from "lucide-react";
+import { Bell, MessageCircle, Shield } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useApproval } from "@/hooks/useApproval";
 
 const AppHeader = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { isAdmin } = useApproval();
 
-  if (location.pathname === "/login" || location.pathname === "/signup") return null;
+  if (["/login", "/signup", "/pending"].includes(location.pathname)) return null;
 
   const initial = user?.user_metadata?.name?.[0]?.toUpperCase() || "U";
 
@@ -18,6 +20,11 @@ const AppHeader = () => {
           Ujebong <span className="text-xs font-normal text-muted-foreground ml-1">by Pop Senek & Dipta</span>
         </h1>
         <div className="flex items-center gap-1">
+          {isAdmin && (
+            <button onClick={() => navigate("/admin")} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
+              <Shield size={18} className="text-primary" />
+            </button>
+          )}
           <button className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
             <MessageCircle size={18} className="text-foreground" />
           </button>

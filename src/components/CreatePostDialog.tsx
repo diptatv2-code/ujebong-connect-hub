@@ -1,26 +1,57 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { X, Image, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface CreatePostDialogProps {
   open: boolean;
   onClose: () => void;
-  onPost: (content: string) => void;
+  onPost: (content: string, imageUrl?: string) => void;
   userName?: string;
 }
 
 const CreatePostDialog = ({ open, onClose, onPost, userName = "You" }: CreatePostDialogProps) => {
+  const { user } = useAuth();
   const [content, setContent] = useState("");
   const [posting, setPosting] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
 
   const handlePost = async () => {
-    if (content.trim()) {
-      setPosting(true);
-      await onPost(content);
-      setContent("");
-      setPosting(false);
-      onClose();
+    if (!content.trim() && !imageFile) return;
+    setPosting(true);
+
+    let imageUrl: string | undefined;
+    if (imageFile && user) {
+      const ext = imageFile.name.split(".").pop();
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("posts").upload(path, imageFile);
+      if (!error) {
+        const { data } = supabase.storage.from("posts").getPublicUrl(path);
+        imageUrl = data.publicUrl;
+      }
     }
+
+    await onPost(content, imageUrl);
+    setContent("");
+    removeImage();
+    setPosting(false);
+    onClose();
   };
 
   return (
@@ -35,7 +66,7 @@ const CreatePostDialog = ({ open, onClose, onPost, userName = "You" }: CreatePos
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <button onClick={onClose}><X size={22} className="text-foreground" /></button>
               <h2 className="text-base font-semibold text-foreground">Create Post</h2>
-              <button onClick={handlePost} disabled={!content.trim() || posting} className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-40 flex items-center gap-1">
+              <button onClick={handlePost} disabled={(!content.trim() && !imageFile) || posting} className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-40 flex items-center gap-1">
                 {posting && <Loader2 size={12} className="animate-spin" />}
                 Post
               </button>
@@ -52,8 +83,21 @@ const CreatePostDialog = ({ open, onClose, onPost, userName = "You" }: CreatePos
               className="min-h-[120px] w-full resize-none bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none"
               autoFocus
             />
+
+            {imagePreview && (
+              <div className="relative mx-4 mb-3">
+                <img src={imagePreview} alt="Preview" className="w-full rounded-xl object-cover max-h-60" />
+                <button onClick={removeImage} className="absolute top-2 right-2 rounded-full bg-foreground/60 p-1 text-background">
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center gap-4 border-t border-border px-4 py-3">
-              <button className="text-muted-foreground"><Image size={22} /></button>
+              <input type="file" accept="image/*" ref={fileRef} onChange={handleImageSelect} className="hidden" />
+              <button onClick={() => fileRef.current?.click()} className="text-muted-foreground hover:text-primary transition-colors">
+                <Image size={22} />
+              </button>
             </div>
           </motion.div>
         </motion.div>

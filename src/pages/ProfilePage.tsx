@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Settings, UserPlus, UserCheck, Camera, LogOut } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import PostCard from "@/components/PostCard";
@@ -22,6 +22,8 @@ const ProfilePage = () => {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editBio, setEditBio] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const avatarRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -110,6 +112,22 @@ const ProfilePage = () => {
     toast.success("Profile updated!");
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setUploading(true);
+    const ext = file.name.split(".").pop();
+    const path = `${user.id}/avatar.${ext}`;
+    const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+    if (error) { toast.error("Upload failed"); setUploading(false); return; }
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;
+    await supabase.from("profiles").update({ avatar_url: avatarUrl }).eq("id", user.id);
+    setProfile((p: any) => ({ ...p, avatar_url: avatarUrl }));
+    setUploading(false);
+    toast.success("Profile photo updated!");
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/login");
@@ -129,11 +147,23 @@ const ProfilePage = () => {
 
       <div className="relative pt-12">
         <div className="h-36 bg-gradient-to-br from-primary/30 to-primary/10" />
-        <div className="absolute -bottom-12 left-4 rounded-full border-4 border-card">
+        <div className="absolute -bottom-12 left-4 rounded-full border-4 border-card relative">
           {profile?.avatar_url ? (
             <img src={profile.avatar_url} alt="" className="h-24 w-24 rounded-full bg-muted object-cover" />
           ) : (
             <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center text-primary text-3xl font-bold">{initial}</div>
+          )}
+          {isOwnProfile && (
+            <>
+              <input type="file" accept="image/*" ref={avatarRef} onChange={handleAvatarUpload} className="hidden" />
+              <button
+                onClick={() => avatarRef.current?.click()}
+                disabled={uploading}
+                className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground border-2 border-card"
+              >
+                <Camera size={14} />
+              </button>
+            </>
           )}
         </div>
       </div>
