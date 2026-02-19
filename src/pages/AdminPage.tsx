@@ -9,6 +9,7 @@ interface UserProfile {
   id: string;
   name: string;
   avatar_url: string | null;
+  selfie_url: string | null;
   bio: string | null;
   is_approved: boolean;
   created_at: string;
@@ -24,7 +25,7 @@ const AdminPage = () => {
   const fetchProfiles = async () => {
     const { data } = await supabase
       .from("profiles")
-      .select("id, name, avatar_url, bio, is_approved, created_at")
+      .select("id, name, avatar_url, selfie_url, bio, is_approved, created_at")
       .order("created_at", { ascending: false });
     setProfiles(data || []);
     setLoading(false);
@@ -88,13 +89,20 @@ const AdminPage = () => {
               {filtered.map((p) => (
                 <div key={p.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${p.id}`)}>
-                    {p.avatar_url ? (
-                      <img src={p.avatar_url} alt="" className="h-11 w-11 rounded-full bg-muted object-cover" />
-                    ) : (
-                      <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                        {p.name?.[0]?.toUpperCase() || "U"}
-                      </div>
-                    )}
+                    <div className="relative">
+                      {p.avatar_url ? (
+                        <img src={p.avatar_url} alt="" className="h-11 w-11 rounded-full bg-muted object-cover" />
+                      ) : (
+                        <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                          {p.name?.[0]?.toUpperCase() || "U"}
+                        </div>
+                      )}
+                      {p.selfie_url && !p.is_approved && (
+                        <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full border-2 border-card overflow-hidden">
+                          <img src={p.selfie_url} alt="Selfie" className="h-full w-full object-cover" />
+                        </div>
+                      )}
+                    </div>
                     <div>
                       <p className="text-sm font-semibold text-foreground">{p.name || "Unnamed"}</p>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -104,6 +112,11 @@ const AdminPage = () => {
                           <><Clock size={12} className="text-warning" /> Pending</>
                         )}
                       </div>
+                      {p.selfie_url && !p.is_approved && (
+                        <a href={p.selfie_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium text-primary" onClick={e => e.stopPropagation()}>
+                          View selfie →
+                        </a>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-1">

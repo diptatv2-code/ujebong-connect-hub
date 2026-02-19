@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import SelfieCapture from "@/components/SelfieCapture";
 
 const LoginPage = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -12,16 +14,43 @@ const LoginPage = () => {
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selfieFile, setSelfieFile] = useState<File | null>(null);
+  const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
   const navigate = useNavigate();
   const { signUp, signIn } = useAuth();
 
+  const handleSelfieCapture = (file: File) => {
+    setSelfieFile(file);
+    setSelfiePreview(URL.createObjectURL(file));
+  };
+
+  const handleRetake = () => {
+    setSelfieFile(null);
+    setSelfiePreview(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSignUp && !selfieFile) {
+      toast.error("Please take a selfie to complete signup");
+      return;
+    }
     setLoading(true);
     try {
       if (isSignUp) {
-        const { error } = await signUp(email, password, name);
+        const { error, userId } = await signUp(email, password, name);
         if (error) throw error;
+
+        // Upload selfie
+        if (selfieFile && userId) {
+          const path = `${userId}/selfie.jpg`;
+          const { error: uploadErr } = await supabase.storage.from("selfies").upload(path, selfieFile);
+          if (!uploadErr) {
+            const { data } = supabase.storage.from("selfies").getPublicUrl(path);
+            await supabase.from("profiles").update({ selfie_url: data.publicUrl }).eq("id", userId);
+          }
+        }
+
         toast.success("Account created! Welcome to Ujebong!");
       } else {
         const { error } = await signIn(email, password);
@@ -54,7 +83,12 @@ const LoginPage = () => {
         className="w-full max-w-sm space-y-3"
       >
         {isSignUp && (
-          <input type="text" placeholder="Full Name" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} required />
+          <>
+            <input type="text" placeholder="Full Name" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} required />
+            <div className="flex justify-center py-2">
+              <SelfieCapture onCapture={handleSelfieCapture} preview={selfiePreview} onRetake={handleRetake} />
+            </div>
+          </>
         )}
         <input type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} required />
         <div className="relative">
