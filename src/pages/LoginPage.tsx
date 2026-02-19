@@ -25,6 +25,7 @@ const LoginPage = () => {
         className="mb-8 text-center"
       >
         <h1 className="text-4xl font-extrabold text-primary-foreground">Ujebong</h1>
+        <p className="mt-1 text-xs text-primary-foreground/60">by Pop Senek & Dipta</p>
         <p className="mt-2 text-sm text-primary-foreground/70">Connect with friends and the world</p>
       </motion.div>
 
