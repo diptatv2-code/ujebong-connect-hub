@@ -54,6 +54,9 @@ Deno.serve(async (req) => {
       </div>
     `;
 
+    // Use verified domain if available, fallback to resend test
+    const fromEmail = Deno.env.get("FROM_EMAIL") || "Ujebong <onboarding@resend.dev>";
+
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -61,7 +64,7 @@ Deno.serve(async (req) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "Ujebong <onboarding@resend.dev>",
+        from: fromEmail,
         to: [user.email],
         subject: subjects[type] || `New notification on Ujebong`,
         html: emailHtml,
@@ -69,7 +72,13 @@ Deno.serve(async (req) => {
     });
 
     const result = await res.json();
-    console.log("Email sent:", result);
+    if (!res.ok) {
+      console.error("Resend error:", result);
+      return new Response(JSON.stringify({ success: false, error: result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    console.log("Email sent successfully to:", user.email);
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
