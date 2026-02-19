@@ -1,20 +1,24 @@
 import { useState } from "react";
-import { X, Image, MapPin, Users } from "lucide-react";
+import { X, Image, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface CreatePostDialogProps {
   open: boolean;
   onClose: () => void;
   onPost: (content: string) => void;
+  userName?: string;
 }
 
-const CreatePostDialog = ({ open, onClose, onPost }: CreatePostDialogProps) => {
+const CreatePostDialog = ({ open, onClose, onPost, userName = "You" }: CreatePostDialogProps) => {
   const [content, setContent] = useState("");
+  const [posting, setPosting] = useState(false);
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (content.trim()) {
-      onPost(content);
+      setPosting(true);
+      await onPost(content);
       setContent("");
+      setPosting(false);
       onClose();
     }
   };
@@ -22,66 +26,34 @@ const CreatePostDialog = ({ open, onClose, onPost }: CreatePostDialogProps) => {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-foreground/40"
-          onClick={onClose}
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-end justify-center bg-foreground/40" onClick={onClose}>
           <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
+            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="w-full max-w-lg rounded-t-2xl bg-card"
-            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg rounded-t-2xl bg-card" onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <button onClick={onClose}>
-                <X size={22} className="text-foreground" />
-              </button>
+              <button onClick={onClose}><X size={22} className="text-foreground" /></button>
               <h2 className="text-base font-semibold text-foreground">Create Post</h2>
-              <button
-                onClick={handlePost}
-                disabled={!content.trim()}
-                className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-40"
-              >
+              <button onClick={handlePost} disabled={!content.trim() || posting} className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-40 flex items-center gap-1">
+                {posting && <Loader2 size={12} className="animate-spin" />}
                 Post
               </button>
             </div>
-
-            {/* User */}
             <div className="flex items-center gap-3 px-4 pt-3">
-              <img
-                src="https://api.dicebear.com/7.x/avataaars/svg?seed=you"
-                alt="You"
-                className="h-10 w-10 rounded-full bg-muted"
-              />
-              <p className="text-sm font-semibold text-foreground">You</p>
+              <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                {userName[0]?.toUpperCase() || "U"}
+              </div>
+              <p className="text-sm font-semibold text-foreground">{userName}</p>
             </div>
-
-            {/* Input */}
             <textarea
               placeholder="What's on your mind?"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
+              value={content} onChange={(e) => setContent(e.target.value)}
               className="min-h-[120px] w-full resize-none bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none"
               autoFocus
             />
-
-            {/* Actions */}
             <div className="flex items-center gap-4 border-t border-border px-4 py-3">
-              <button className="text-success">
-                <Image size={22} />
-              </button>
-              <button className="text-destructive">
-                <MapPin size={22} />
-              </button>
-              <button className="text-primary">
-                <Users size={22} />
-              </button>
+              <button className="text-muted-foreground"><Image size={22} /></button>
             </div>
           </motion.div>
         </motion.div>
