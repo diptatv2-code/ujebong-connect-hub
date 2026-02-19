@@ -1,92 +1,105 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Heart, MessageCircle, Share2, MoreHorizontal, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Post } from "@/lib/mock-data";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import type { PostWithProfile } from "@/pages/FeedsPage";
+import { formatDistanceToNow } from "date-fns";
 
 interface PostCardProps {
-  post: Post;
+  post: PostWithProfile;
   onLike: (id: string) => void;
+  onComment: (postId: string, content: string) => void;
+  currentUserId?: string;
 }
 
-const PostCard = ({ post, onLike }: PostCardProps) => {
+interface CommentWithProfile {
+  id: string;
+  content: string;
+  created_at: string;
+  profiles: { name: string; avatar_url: string } | null;
+}
+
+const PostCard = ({ post, onLike, onComment, currentUserId }: PostCardProps) => {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
+  const [comments, setComments] = useState<CommentWithProfile[]>([]);
   const navigate = useNavigate();
 
+  const timeAgo = formatDistanceToNow(new Date(post.created_at), { addSuffix: true });
+
+  const fetchComments = async () => {
+    const { data } = await supabase
+      .from("post_comments")
+      .select("id, content, created_at, user_id")
+      .eq("post_id", post.id)
+      .order("created_at", { ascending: true });
+    if (data) {
+      const userIds = [...new Set(data.map(c => c.user_id))];
+      const { data: profiles } = await supabase.from("profiles").select("id, name, avatar_url").in("id", userIds);
+      const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+      setComments(data.map(c => {
+        const prof = profileMap.get(c.user_id);
+        return { ...c, profiles: prof ? { name: prof.name, avatar_url: prof.avatar_url } : null };
+      }));
+    }
+  };
+
+  useEffect(() => {
+    if (showComments) fetchComments();
+  }, [showComments]);
+
+  const handleSendComment = () => {
+    if (commentText.trim()) {
+      onComment(post.id, commentText.trim());
+      setCommentText("");
+      setTimeout(fetchComments, 500);
+    }
+  };
+
+  const avatarInitial = post.profiles?.name?.[0]?.toUpperCase() || "U";
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="border-b border-border bg-card"
-    >
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="border-b border-border bg-card">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
-        <div
-          className="flex cursor-pointer items-center gap-3"
-          onClick={() => navigate(`/profile/${post.userId}`)}
-        >
-          <img
-            src={post.userAvatar}
-            alt={post.userName}
-            className="h-10 w-10 rounded-full bg-muted object-cover"
-          />
+        <div className="flex cursor-pointer items-center gap-3" onClick={() => navigate(`/profile/${post.user_id}`)}>
+          {post.profiles?.avatar_url ? (
+            <img src={post.profiles.avatar_url} alt="" className="h-10 w-10 rounded-full bg-muted object-cover" />
+          ) : (
+            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">{avatarInitial}</div>
+          )}
           <div>
-            <p className="text-sm font-semibold text-foreground">{post.userName}</p>
-            <p className="text-xs text-muted-foreground">
-              {post.createdAt}
-              {post.groupName && (
-                <span> · <span className="text-primary">{post.groupName}</span></span>
-              )}
-            </p>
+            <p className="text-sm font-semibold text-foreground">{post.profiles?.name || "User"}</p>
+            <p className="text-xs text-muted-foreground">{timeAgo}</p>
           </div>
         </div>
-        <button className="text-muted-foreground">
-          <MoreHorizontal size={20} />
-        </button>
+        <button className="text-muted-foreground"><MoreHorizontal size={20} /></button>
       </div>
 
-      {/* Content */}
       <p className="px-4 pb-2 text-sm leading-relaxed text-foreground">{post.content}</p>
 
-      {/* Image */}
-      {post.image && (
+      {post.image_url && (
         <div className="aspect-[3/2] w-full overflow-hidden bg-muted">
-          <img
-            src={post.image}
-            alt="Post"
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
+          <img src={post.image_url} alt="Post" className="h-full w-full object-cover" loading="lazy" />
         </div>
       )}
 
-      {/* Stats */}
-      {(post.likes > 0 || post.comments.length > 0) && (
+      {(post.like_count > 0 || post.comment_count > 0) && (
         <div className="flex items-center justify-between px-4 py-2 text-xs text-muted-foreground">
-          <span>{post.likes + (post.liked ? 0 : 0)} likes</span>
-          <span>{post.comments.length} comments</span>
+          <span>{post.like_count} likes</span>
+          <span>{post.comment_count} comments</span>
         </div>
       )}
 
-      {/* Actions */}
       <div className="flex border-t border-border">
-        <button
-          onClick={() => onLike(post.id)}
-          className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors"
-        >
+        <button onClick={() => onLike(post.id)} className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors">
           <motion.div whileTap={{ scale: 1.3 }}>
-            <Heart
-              size={18}
-              className={post.liked ? "fill-destructive text-destructive" : "text-muted-foreground"}
-            />
+            <Heart size={18} className={post.liked_by_me ? "fill-destructive text-destructive" : "text-muted-foreground"} />
           </motion.div>
-          <span className={post.liked ? "text-destructive" : "text-muted-foreground"}>Like</span>
+          <span className={post.liked_by_me ? "text-destructive" : "text-muted-foreground"}>Like</span>
         </button>
-        <button
-          onClick={() => setShowComments(!showComments)}
-          className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium text-muted-foreground"
-        >
+        <button onClick={() => setShowComments(!showComments)} className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium text-muted-foreground">
           <MessageCircle size={18} />
           Comment
         </button>
@@ -96,50 +109,38 @@ const PostCard = ({ post, onLike }: PostCardProps) => {
         </button>
       </div>
 
-      {/* Comments */}
       <AnimatePresence>
         {showComments && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-t border-border"
-          >
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-t border-border">
             <div className="space-y-3 px-4 py-3">
-              {post.comments.map((comment) => (
+              {comments.map((comment) => (
                 <div key={comment.id} className="flex gap-2">
-                  <img
-                    src={comment.userAvatar}
-                    alt={comment.userName}
-                    className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-full bg-muted"
-                  />
+                  {comment.profiles?.avatar_url ? (
+                    <img src={comment.profiles.avatar_url} alt="" className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-full bg-muted" />
+                  ) : (
+                    <div className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
+                      {comment.profiles?.name?.[0]?.toUpperCase() || "U"}
+                    </div>
+                  )}
                   <div className="rounded-2xl bg-secondary px-3 py-2">
-                    <p className="text-xs font-semibold text-foreground">{comment.userName}</p>
+                    <p className="text-xs font-semibold text-foreground">{comment.profiles?.name || "User"}</p>
                     <p className="text-xs text-foreground">{comment.content}</p>
                   </div>
                 </div>
               ))}
-              {post.comments.length === 0 && (
-                <p className="text-center text-xs text-muted-foreground">No comments yet</p>
-              )}
+              {comments.length === 0 && <p className="text-center text-xs text-muted-foreground">No comments yet</p>}
             </div>
             <div className="flex items-center gap-2 border-t border-border px-4 py-2">
-              <img
-                src="https://api.dicebear.com/7.x/avataaars/svg?seed=you"
-                alt="You"
-                className="h-7 w-7 rounded-full bg-muted"
-              />
               <div className="flex flex-1 items-center rounded-full bg-secondary px-3 py-1.5">
                 <input
                   type="text"
                   placeholder="Write a comment..."
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSendComment()}
                   className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
                 />
-                <button className="text-primary">
-                  <Send size={14} />
-                </button>
+                <button onClick={handleSendComment} className="text-primary"><Send size={14} /></button>
               </div>
             </div>
           </motion.div>
