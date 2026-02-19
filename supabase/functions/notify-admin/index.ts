@@ -17,9 +17,25 @@ Deno.serve(async (req) => {
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
     const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL")!;
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SECRET_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Build one-click approve URL
-    const approveUrl = `${SUPABASE_URL}/functions/v1/approve-user?user_id=${user_id}&secret=${RESEND_API_KEY.slice(0, 8)}`;
+    // Generate HMAC-signed approval token
+    const timestamp = Date.now().toString();
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(SECRET_KEY),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const data = encoder.encode(`${user_id}:${timestamp}`);
+    const signature = await crypto.subtle.sign("HMAC", key, data);
+    const token = Array.from(new Uint8Array(signature))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    const approveUrl = `${SUPABASE_URL}/functions/v1/approve-user?user_id=${user_id}&token=${token}&ts=${timestamp}`;
 
     const emailHtml = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">

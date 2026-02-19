@@ -1,15 +1,56 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+async function verifyHmac(userId: string, token: string, timestamp: string): Promise<boolean> {
+  const SECRET_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(SECRET_KEY),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"]
+  );
+  const data = encoder.encode(`${userId}:${timestamp}`);
+  const signature = await crypto.subtle.sign("HMAC", key, data);
+  const expectedToken = Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  // Constant-time comparison
+  if (expectedToken.length !== token.length) return false;
+  let result = 0;
+  for (let i = 0; i < expectedToken.length; i++) {
+    result |= expectedToken.charCodeAt(i) ^ token.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const userId = url.searchParams.get("user_id");
-    const secret = url.searchParams.get("secret");
+    const token = url.searchParams.get("token");
+    const timestamp = url.searchParams.get("ts");
 
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
-    const expectedSecret = RESEND_API_KEY.slice(0, 8);
+    if (!userId || !token || !timestamp) {
+      return new Response(renderHtml("❌ Invalid or unauthorized request.", false), {
+        status: 403,
+        headers: { "Content-Type": "text/html" },
+      });
+    }
 
-    if (!userId || secret !== expectedSecret) {
+    // Check token expiry (24 hours)
+    const tokenAge = Date.now() - parseInt(timestamp, 10);
+    if (isNaN(tokenAge) || tokenAge > 24 * 60 * 60 * 1000 || tokenAge < 0) {
+      return new Response(renderHtml("❌ This approval link has expired. Please use the admin panel to approve users.", false), {
+        status: 403,
+        headers: { "Content-Type": "text/html" },
+      });
+    }
+
+    // Verify HMAC signature
+    const isValid = await verifyHmac(userId, token, timestamp);
+    if (!isValid) {
       return new Response(renderHtml("❌ Invalid or unauthorized request.", false), {
         status: 403,
         headers: { "Content-Type": "text/html" },
