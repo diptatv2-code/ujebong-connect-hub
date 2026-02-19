@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null; userId?: string }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         body: { user_id: data.user.id, user_name: name, user_email: email },
       }).catch(console.error);
     }
-    return { error: error as Error | null };
+    return { error: error as Error | null, userId: data.user?.id };
   };
 
   const signIn = async (email: string, password: string) => {
