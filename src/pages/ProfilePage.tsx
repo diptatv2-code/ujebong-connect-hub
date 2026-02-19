@@ -23,6 +23,8 @@ const ProfilePage = () => {
   const [editName, setEditName] = useState("");
   const [editBio, setEditBio] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [editEmail, setEditEmail] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
   const avatarRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,6 +40,7 @@ const ProfilePage = () => {
       setProfile(prof);
       setEditName(prof?.name || "");
       setEditBio(prof?.bio || "");
+      setEditEmail(user?.email || "");
 
       const acceptedFriendships = friendships?.filter((f: any) => f.status === "accepted") || [];
       setFriendCount(acceptedFriendships.length);
@@ -128,6 +131,17 @@ const ProfilePage = () => {
     toast.success("Profile updated!");
   };
 
+  const handleChangeEmail = async () => {
+    if (!user) return;
+    const newEmail = editEmail.trim();
+    if (!newEmail || newEmail === user.email) return;
+    setEmailSaving(true);
+    const { error } = await supabase.auth.updateUser({ email: newEmail });
+    setEmailSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Confirmation email sent to your new address. Please check your inbox.");
+  };
+
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -189,6 +203,12 @@ const ProfilePage = () => {
           <div className="space-y-2">
             <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground outline-none" placeholder="Name" />
             <textarea value={editBio} onChange={(e) => setEditBio(e.target.value)} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground outline-none" placeholder="Bio" rows={2} />
+            <div className="flex items-center gap-2">
+              <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground outline-none" placeholder="Email" type="email" />
+              <button onClick={handleChangeEmail} disabled={emailSaving || editEmail.trim() === user?.email} className="rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50">
+                {emailSaving ? "..." : "Change"}
+              </button>
+            </div>
             <div className="flex gap-2">
               <button onClick={handleSaveProfile} className="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-primary-foreground">Save</button>
               <button onClick={() => setEditing(false)} className="flex-1 rounded-lg bg-secondary py-2 text-sm font-medium text-foreground">Cancel</button>
@@ -198,6 +218,7 @@ const ProfilePage = () => {
           <>
             <h1 className="text-xl font-bold text-foreground">{profile?.name}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{profile?.bio || "No bio yet"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">✉️ {user?.email}</p>
             <p className="mt-1 text-xs text-muted-foreground">{friendCount} friends</p>
             <div className="mt-3 flex gap-2">
               {isOwnProfile ? (
