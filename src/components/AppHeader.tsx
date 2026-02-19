@@ -14,7 +14,7 @@ const AppHeader = () => {
           className="cursor-pointer text-xl font-extrabold text-primary"
           onClick={() => navigate("/")}
         >
-          Ujebong
+          Ujebong <span className="text-xs font-normal text-muted-foreground ml-1">by Pop Senek & Dipta</span>
         </h1>
         <div className="flex items-center gap-1">
           <button className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
