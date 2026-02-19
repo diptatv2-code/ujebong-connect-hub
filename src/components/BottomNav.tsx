@@ -12,8 +12,7 @@ const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Hide on auth pages
-  if (location.pathname === "/login" || location.pathname === "/signup") return null;
+  if (["/login", "/signup", "/pending"].includes(location.pathname)) return null;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card safe-bottom">
@@ -33,17 +32,8 @@ const BottomNav = () => {
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )}
-              <tab.icon
-                size={22}
-                className={isActive ? "text-primary" : "text-muted-foreground"}
-              />
-              <span
-                className={`text-[10px] font-medium ${
-                  isActive ? "text-primary" : "text-muted-foreground"
-                }`}
-              >
-                {tab.label}
-              </span>
+              <tab.icon size={22} className={isActive ? "text-primary" : "text-muted-foreground"} />
+              <span className={`text-[10px] font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}>{tab.label}</span>
             </button>
           );
         })}

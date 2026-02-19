@@ -83,9 +83,9 @@ const FeedsPage = () => {
     }
   };
 
-  const handlePost = async (content: string) => {
+  const handlePost = async (content: string, imageUrl?: string) => {
     if (!user) return;
-    await supabase.from("posts").insert({ user_id: user.id, content });
+    await supabase.from("posts").insert({ user_id: user.id, content, image_url: imageUrl || null });
   };
 
   const handleComment = async (postId: string, content: string) => {
