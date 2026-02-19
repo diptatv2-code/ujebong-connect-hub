@@ -16,6 +16,8 @@ export interface PostWithProfile {
   like_count: number;
   comment_count: number;
   liked_by_me: boolean;
+  my_reaction: string | null;
+  reaction_counts: Record<string, number>;
 }
 
 const FeedsPage = () => {
@@ -41,18 +43,27 @@ const FeedsPage = () => {
 
     // Get like counts + my likes
     const postIds = rawPosts.map((p) => p.id);
-    const { data: likes } = await supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds);
+    const { data: likes } = await supabase.from("post_likes").select("post_id, user_id, reaction_type").in("post_id", postIds);
     const { data: comments } = await supabase.from("post_comments").select("post_id").in("post_id", postIds);
 
     const enriched: PostWithProfile[] = rawPosts.map((p) => {
       const prof = profileMap.get(p.user_id);
+      const postLikes = likes?.filter((l) => l.post_id === p.id) ?? [];
+      const myLike = postLikes.find((l) => l.user_id === user.id);
+      const reactionCounts: Record<string, number> = {};
+      postLikes.forEach((l) => {
+        const r = l.reaction_type || "like";
+        reactionCounts[r] = (reactionCounts[r] || 0) + 1;
+      });
       return {
-      ...p,
-      profiles: prof ? { name: prof.name, avatar_url: prof.avatar_url } : null,
-      like_count: likes?.filter((l) => l.post_id === p.id).length ?? 0,
-      comment_count: comments?.filter((c) => c.post_id === p.id).length ?? 0,
-      liked_by_me: likes?.some((l) => l.post_id === p.id && l.user_id === user.id) ?? false,
-    };
+        ...p,
+        profiles: prof ? { name: prof.name, avatar_url: prof.avatar_url } : null,
+        like_count: postLikes.length,
+        comment_count: comments?.filter((c) => c.post_id === p.id).length ?? 0,
+        liked_by_me: !!myLike,
+        my_reaction: myLike?.reaction_type || null,
+        reaction_counts: reactionCounts,
+      };
     });
 
     setPosts(enriched);
@@ -71,15 +82,20 @@ const FeedsPage = () => {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  const handleLike = async (postId: string) => {
+  const handleReaction = async (postId: string, reactionType: string) => {
     if (!user) return;
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
 
-    if (post.liked_by_me) {
+    if (post.my_reaction === reactionType) {
+      // Remove reaction
       await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", user.id);
+    } else if (post.liked_by_me) {
+      // Change reaction
+      await supabase.from("post_likes").update({ reaction_type: reactionType }).eq("post_id", postId).eq("user_id", user.id);
     } else {
-      await supabase.from("post_likes").insert({ post_id: postId, user_id: user.id });
+      // New reaction
+      await supabase.from("post_likes").insert({ post_id: postId, user_id: user.id, reaction_type: reactionType });
     }
   };
 
@@ -120,7 +136,7 @@ const FeedsPage = () => {
           <p className="text-center text-sm text-muted-foreground py-12">No posts yet. Be the first to share!</p>
         ) : (
           posts.map((post) => (
-            <PostCard key={post.id} post={post} onLike={handleLike} onComment={handleComment} currentUserId={user?.id} />
+            <PostCard key={post.id} post={post} onReaction={handleReaction} onComment={handleComment} currentUserId={user?.id} />
           ))
         )}
       </div>
