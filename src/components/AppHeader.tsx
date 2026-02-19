@@ -25,10 +25,10 @@ const AppHeader = () => {
               <Shield size={18} className="text-primary" />
             </button>
           )}
-          <button className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
+          <button onClick={() => navigate("/messages")} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
             <MessageCircle size={18} className="text-foreground" />
           </button>
-          <button className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
+          <button onClick={() => navigate("/messages")} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
             <Bell size={18} className="text-foreground" />
           </button>
           <button onClick={() => navigate(`/profile/${user?.id}`)} className="ml-1 h-8 w-8 overflow-hidden rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">

@@ -153,21 +153,26 @@ const ChatPage = () => {
   return (
     <div className="flex h-[calc(100dvh-var(--header-height))] flex-col">
       {/* Chat Header */}
-      <div className="flex items-center gap-3 border-b border-border bg-card px-3 py-2.5">
+      <div className="flex items-center justify-between border-b border-border bg-card px-3 py-2.5">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/messages")} className="shrink-0">
+            <ArrowLeft size={20} />
+          </Button>
+          {partner && (
+            <div className="flex items-center gap-2.5" onClick={() => navigate(`/profile/${partner.id}`)} role="button">
+              <Avatar className="h-9 w-9">
+                <AvatarImage src={partner.avatar_url || undefined} />
+                <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
+                  {partner.name.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-sm font-semibold text-foreground">{partner.name}</span>
+            </div>
+          )}
+        </div>
         <Button variant="ghost" size="icon" onClick={() => navigate("/messages")} className="shrink-0">
-          <ArrowLeft size={20} />
+          <X size={20} />
         </Button>
-        {partner && (
-          <div className="flex items-center gap-2.5" onClick={() => navigate(`/profile/${partner.id}`)} role="button">
-            <Avatar className="h-9 w-9">
-              <AvatarImage src={partner.avatar_url || undefined} />
-              <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
-                {partner.name.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-sm font-semibold text-foreground">{partner.name}</span>
-          </div>
-        )}
       </div>
 
       {/* Messages */}
