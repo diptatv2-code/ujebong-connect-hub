@@ -105,6 +105,7 @@ export type Database = {
       }
       messages: {
         Row: {
+          audio_url: string | null
           content: string | null
           created_at: string
           id: string
@@ -114,6 +115,7 @@ export type Database = {
           sender_id: string
         }
         Insert: {
+          audio_url?: string | null
           content?: string | null
           created_at?: string
           id?: string
@@ -123,6 +125,7 @@ export type Database = {
           sender_id: string
         }
         Update: {
+          audio_url?: string | null
           content?: string | null
           created_at?: string
           id?: string
@@ -135,6 +138,7 @@ export type Database = {
       }
       post_comments: {
         Row: {
+          audio_url: string | null
           content: string
           created_at: string
           id: string
@@ -142,6 +146,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          audio_url?: string | null
           content: string
           created_at?: string
           id?: string
@@ -149,6 +154,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          audio_url?: string | null
           content?: string
           created_at?: string
           id?: string

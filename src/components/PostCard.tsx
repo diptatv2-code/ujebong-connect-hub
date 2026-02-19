@@ -3,8 +3,12 @@ import { Heart, MessageCircle, Share2, MoreHorizontal, Send } from "lucide-react
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/hooks/use-toast";
 import type { PostWithProfile } from "@/pages/FeedsPage";
 import { formatDistanceToNow } from "date-fns";
+import VoiceRecorder from "@/components/VoiceRecorder";
+import AudioPlayer from "@/components/AudioPlayer";
 
 interface PostCardProps {
   post: PostWithProfile;
@@ -16,6 +20,7 @@ interface PostCardProps {
 interface CommentWithProfile {
   id: string;
   content: string;
+  audio_url: string | null;
   created_at: string;
   profiles: { name: string; avatar_url: string } | null;
 }
@@ -28,10 +33,12 @@ const PostCard = ({ post, onLike, onComment, currentUserId }: PostCardProps) => 
 
   const timeAgo = formatDistanceToNow(new Date(post.created_at), { addSuffix: true });
 
+  const { user } = useAuth();
+
   const fetchComments = async () => {
     const { data } = await supabase
       .from("post_comments")
-      .select("id, content, created_at, user_id")
+      .select("id, content, audio_url, created_at, user_id")
       .eq("post_id", post.id)
       .order("created_at", { ascending: true });
     if (data) {
@@ -40,7 +47,7 @@ const PostCard = ({ post, onLike, onComment, currentUserId }: PostCardProps) => 
       const profileMap = new Map((profiles || []).map(p => [p.id, p]));
       setComments(data.map(c => {
         const prof = profileMap.get(c.user_id);
-        return { ...c, profiles: prof ? { name: prof.name, avatar_url: prof.avatar_url } : null };
+        return { ...c, audio_url: c.audio_url || null, profiles: prof ? { name: prof.name, avatar_url: prof.avatar_url } : null };
       }));
     }
   };
@@ -55,6 +62,23 @@ const PostCard = ({ post, onLike, onComment, currentUserId }: PostCardProps) => 
       setCommentText("");
       setTimeout(fetchComments, 500);
     }
+  };
+
+  const handleVoiceComment = async (file: File) => {
+    if (!user) return;
+    const path = `${user.id}/${Date.now()}.webm`;
+    const { error: uploadErr } = await supabase.storage.from("voice-notes").upload(path, file);
+    if (uploadErr) {
+      toast({ title: "Voice upload failed", description: uploadErr.message, variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("post_comments").insert({
+      post_id: post.id,
+      user_id: user.id,
+      content: "",
+      audio_url: path,
+    });
+    if (!error) setTimeout(fetchComments, 500);
   };
 
   const avatarInitial = post.profiles?.name?.[0]?.toUpperCase() || "U";
@@ -124,13 +148,15 @@ const PostCard = ({ post, onLike, onComment, currentUserId }: PostCardProps) => 
                   )}
                   <div className="rounded-2xl bg-secondary px-3 py-2">
                     <p className="text-xs font-semibold text-foreground">{comment.profiles?.name || "User"}</p>
-                    <p className="text-xs text-foreground">{comment.content}</p>
+                    {comment.audio_url && <AudioPlayer path={comment.audio_url} />}
+                    {comment.content && <p className="text-xs text-foreground">{comment.content}</p>}
                   </div>
                 </div>
               ))}
               {comments.length === 0 && <p className="text-center text-xs text-muted-foreground">No comments yet</p>}
             </div>
             <div className="flex items-center gap-2 border-t border-border px-4 py-2">
+              <VoiceRecorder onRecordingComplete={handleVoiceComment} compact />
               <div className="flex flex-1 items-center rounded-full bg-secondary px-3 py-1.5">
                 <input
                   type="text"

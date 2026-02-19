@@ -15,6 +15,7 @@ interface Conversation {
   last_message_at: string;
   unread_count: number;
   has_image: boolean;
+  has_audio: boolean;
 }
 
 const MessagesPage = () => {
@@ -73,6 +74,7 @@ const MessagesPage = () => {
         last_message_at: last.created_at,
         unread_count: unread,
         has_image: !!last.image_url,
+        has_audio: !!last.audio_url,
       };
     });
 
@@ -156,7 +158,7 @@ const MessagesPage = () => {
                   </span>
                 </div>
                 <p className={`truncate text-xs ${conv.unread_count > 0 ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
-                  {conv.has_image && !conv.last_message ? "📷 Photo" : conv.last_message || "📷 Photo"}
+                  {conv.has_audio && !conv.last_message ? "🎤 Voice message" : conv.has_image && !conv.last_message ? "📷 Photo" : conv.last_message || "📷 Photo"}
                 </p>
               </div>
             </button>

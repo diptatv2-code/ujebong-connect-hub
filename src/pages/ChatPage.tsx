@@ -6,6 +6,8 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Send, ImagePlus, X } from "lucide-react";
+import VoiceRecorder from "@/components/VoiceRecorder";
+import AudioPlayer from "@/components/AudioPlayer";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 
@@ -15,6 +17,7 @@ interface Message {
   receiver_id: string;
   content: string;
   image_url: string | null;
+  audio_url: string | null;
   read_at: string | null;
   created_at: string;
 }
@@ -50,6 +53,7 @@ const ChatPage = () => {
   const [text, setText] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -124,10 +128,11 @@ const ChatPage = () => {
   };
 
   const handleSend = async () => {
-    if (!user || !userId || (!text.trim() && !imageFile)) return;
+    if (!user || !userId || (!text.trim() && !imageFile && !audioFile)) return;
     setSending(true);
 
     let image_url: string | null = null;
+    let audio_url: string | null = null;
 
     if (imageFile) {
       const ext = imageFile.name.split(".").pop();
@@ -138,8 +143,18 @@ const ChatPage = () => {
         setSending(false);
         return;
       }
-      // Store the path, not a public URL — we'll use signed URLs to display
       image_url = path;
+    }
+
+    if (audioFile) {
+      const path = `${user.id}/${Date.now()}.webm`;
+      const { error } = await supabase.storage.from("voice-notes").upload(path, audioFile);
+      if (error) {
+        toast({ title: "Voice upload failed", description: error.message, variant: "destructive" });
+        setSending(false);
+        return;
+      }
+      audio_url = path;
     }
 
     const { error } = await supabase.from("messages").insert({
@@ -147,6 +162,7 @@ const ChatPage = () => {
       receiver_id: userId,
       content: text.trim(),
       image_url,
+      audio_url,
     });
 
     if (error) {
@@ -155,6 +171,7 @@ const ChatPage = () => {
       setText("");
       setImageFile(null);
       setImagePreview(null);
+      setAudioFile(null);
     }
     setSending(false);
   };
@@ -217,6 +234,9 @@ const ChatPage = () => {
                       className="mb-1.5 max-h-56 w-full rounded-lg object-cover"
                     />
                   )}
+                  {msg.audio_url && (
+                    <AudioPlayer path={msg.audio_url} isMine={isMine} />
+                  )}
                   {msg.content && <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>}
                   <p className={`mt-0.5 text-[10px] ${isMine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                     {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })}
@@ -244,6 +264,21 @@ const ChatPage = () => {
         </div>
       )}
 
+      {/* Audio preview */}
+      {audioFile && (
+        <div className="border-t border-border bg-card px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">🎤 Voice message ready</span>
+            <button
+              onClick={() => setAudioFile(null)}
+              className="rounded-full bg-destructive p-0.5 text-destructive-foreground"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <div className="border-t border-border bg-card px-3 py-2 safe-bottom">
         <div className="flex items-center gap-2">
@@ -251,6 +286,10 @@ const ChatPage = () => {
           <Button variant="ghost" size="icon" onClick={() => fileRef.current?.click()} className="shrink-0 text-muted-foreground">
             <ImagePlus size={20} />
           </Button>
+          <VoiceRecorder
+            onRecordingComplete={(file) => setAudioFile(file)}
+            onCancel={() => setAudioFile(null)}
+          />
           <Input
             placeholder="Message..."
             value={text}
@@ -261,7 +300,7 @@ const ChatPage = () => {
           <Button
             size="icon"
             onClick={handleSend}
-            disabled={sending || (!text.trim() && !imageFile)}
+            disabled={sending || (!text.trim() && !imageFile && !audioFile)}
             className="shrink-0"
           >
             <Send size={18} />
