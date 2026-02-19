@@ -130,17 +130,17 @@ const SelfieCapture = ({ onCapture, preview, onRetake }: SelfieCaptureProps) => 
           <button
             type="button"
             onClick={startCamera}
-            className="flex h-40 w-40 flex-col items-center justify-center gap-2 rounded-full border-2 border-dashed border-primary/30 bg-primary/5 text-primary/60 transition-colors hover:border-primary/50"
+            className="flex h-40 w-40 flex-col items-center justify-center gap-2 rounded-full border-2 border-dashed border-primary-foreground/50 bg-primary-foreground/10 text-primary-foreground/80 transition-colors hover:border-primary-foreground/70 hover:bg-primary-foreground/20"
           >
             <Camera size={32} />
             <span className="text-xs font-medium">Take Selfie</span>
           </button>
-          {error && <p className="text-xs text-destructive rounded px-2 py-1 text-center max-w-[220px]">{error}</p>}
+          {error && <p className="text-xs text-destructive-foreground bg-destructive/80 rounded px-2 py-1 text-center max-w-[220px]">{error}</p>}
           {(cameraFailed || true) && (
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+              className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/20 px-4 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary-foreground/30"
             >
               <Upload size={14} /> Upload Photo Instead
             </button>
