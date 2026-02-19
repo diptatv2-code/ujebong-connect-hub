@@ -23,7 +23,7 @@ interface FriendshipData {
 const FriendsPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<"all" | "friends" | "requests">("all");
+  const [filter, setFilter] = useState<"all" | "friends">("all");
   const [allProfiles, setAllProfiles] = useState<ProfileData[]>([]);
   const [friendships, setFriendships] = useState<FriendshipData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,16 +88,16 @@ const FriendsPage = () => {
   return (
     <div className="pb-16 pt-14">
       <div className="flex border-b border-border bg-card">
-        {(["all", "friends", "requests"] as const).map((tab) => (
-          <button key={tab} onClick={() => setFilter(tab)} className={`flex-1 py-3 text-sm font-medium capitalize transition-colors ${filter === tab ? "border-b-2 border-primary text-primary" : "text-muted-foreground"}`}>
-            {tab}{tab === "requests" && received.length > 0 ? ` (${received.length})` : ""}
+        {(["all", "friends"] as const).map((tab) => (
+          <button key={tab} onClick={() => setFilter(tab)} className={`flex-1 py-3 text-sm font-medium transition-colors ${filter === tab ? "border-b-2 border-primary text-primary" : "text-muted-foreground"}`}>
+            {tab === "all" ? "All Users" : `Friends (${friends.length})`}
           </button>
         ))}
       </div>
 
       <div className="space-y-1 bg-muted p-2">
         {/* Incoming Requests */}
-        {(filter === "all" || filter === "requests") && received.length > 0 && (
+        {filter === "all" && received.length > 0 && (
           <div className="rounded-xl bg-card p-4">
             <h3 className="mb-3 text-sm font-semibold text-foreground">Friend Requests ({received.length})</h3>
             <div className="space-y-3">
@@ -120,8 +120,49 @@ const FriendsPage = () => {
           </div>
         )}
 
-        {/* Friends */}
-        {(filter === "all" || filter === "friends") && friends.length > 0 && (
+        {/* All Users */}
+        {filter === "all" && (
+          <div className="rounded-xl bg-card p-4">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">All Users ({allProfiles.length})</h3>
+            <div className="space-y-3">
+              {allProfiles.map((p) => {
+                const status = getFriendStatus(p.id);
+                return (
+                  <div key={p.id} className="flex items-center justify-between">
+                    <div className="flex cursor-pointer items-center gap-3" onClick={() => navigate(`/profile/${p.id}`)}>
+                      {p.avatar_url ? <img src={p.avatar_url} alt="" className="h-11 w-11 rounded-full bg-muted object-cover" /> : <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">{p.name[0]}</div>}
+                      <div><p className="text-sm font-semibold text-foreground">{p.name}</p><p className="text-xs text-muted-foreground">{p.bio || "New to Ujebong"}</p></div>
+                    </div>
+                    {status === "none" && (
+                      <button onClick={() => sendRequest(p.id)} className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+                        <UserPlus size={14} /> Add
+                      </button>
+                    )}
+                    {status === "friends" && (
+                      <button onClick={() => removeFriend(getFriendship(p.id)!.id)} className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground">
+                        <UserCheck size={14} /> Friends
+                      </button>
+                    )}
+                    {status === "sent" && (
+                      <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                        <Clock size={14} /> Pending
+                      </span>
+                    )}
+                    {status === "received" && (
+                      <button onClick={() => acceptRequest(getFriendship(p.id)!.id)} className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+                        <Check size={14} /> Accept
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {allProfiles.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">No other users yet. Share the app!</p>}
+            </div>
+          </div>
+        )}
+
+        {/* Friends Only */}
+        {filter === "friends" && (
           <div className="rounded-xl bg-card p-4">
             <h3 className="mb-3 text-sm font-semibold text-foreground">Your Friends ({friends.length})</h3>
             <div className="space-y-3">
@@ -136,31 +177,10 @@ const FriendsPage = () => {
                   </button>
                 </motion.div>
               ))}
+              {friends.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">You haven't added any friends yet.</p>}
             </div>
           </div>
         )}
-
-        {/* Suggestions */}
-        {filter === "all" && suggestions.length > 0 && (
-          <div className="rounded-xl bg-card p-4">
-            <h3 className="mb-3 text-sm font-semibold text-foreground">Suggested Friends</h3>
-            <div className="space-y-3">
-              {suggestions.map((p) => (
-                <div key={p.id} className="flex items-center justify-between">
-                  <div className="flex cursor-pointer items-center gap-3" onClick={() => navigate(`/profile/${p.id}`)}>
-                    {p.avatar_url ? <img src={p.avatar_url} alt="" className="h-11 w-11 rounded-full bg-muted object-cover" /> : <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">{p.name[0]}</div>}
-                    <div><p className="text-sm font-semibold text-foreground">{p.name}</p><p className="text-xs text-muted-foreground">{p.bio || "New to Ujebong"}</p></div>
-                  </div>
-                  <button onClick={() => sendRequest(p.id)} className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
-                    <UserPlus size={14} /> Add
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {allProfiles.length === 0 && <p className="text-center text-sm text-muted-foreground py-12">No other users yet. Share the app!</p>}
       </div>
     </div>
   );
