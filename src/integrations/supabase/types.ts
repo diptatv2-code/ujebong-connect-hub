@@ -136,6 +136,42 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          actor_id: string
+          content: string | null
+          created_at: string
+          id: string
+          message_id: string | null
+          post_id: string | null
+          read_at: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          actor_id: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          post_id?: string | null
+          read_at?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          actor_id?: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          post_id?: string | null
+          read_at?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       post_comments: {
         Row: {
           audio_url: string | null

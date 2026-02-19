@@ -2,12 +2,14 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Bell, MessageCircle, Shield } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useApproval } from "@/hooks/useApproval";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const AppHeader = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const { isAdmin } = useApproval();
+  const { unreadCount } = useNotifications();
 
   if (["/login", "/signup", "/pending"].includes(location.pathname)) return null;
 
@@ -28,8 +30,13 @@ const AppHeader = () => {
           <button onClick={() => navigate("/messages")} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
             <MessageCircle size={18} className="text-foreground" />
           </button>
-          <button onClick={() => navigate("/messages")} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
+          <button onClick={() => navigate("/notifications")} className="relative flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
             <Bell size={18} className="text-foreground" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
           </button>
           <button onClick={() => navigate(`/profile/${user?.id}`)} className="ml-1 h-8 w-8 overflow-hidden rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
             {initial}
