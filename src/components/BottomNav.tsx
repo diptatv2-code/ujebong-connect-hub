@@ -1,10 +1,11 @@
-import { Home, Users, Search } from "lucide-react";
+import { Home, Users, Search, MessageCircle } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
 const tabs = [
   { path: "/", icon: Home, label: "Feeds" },
   { path: "/friends", icon: Users, label: "Friends" },
+  { path: "/messages", icon: MessageCircle, label: "Messages" },
   { path: "/search", icon: Search, label: "Search" },
 ];
 
@@ -12,7 +13,7 @@ const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  if (["/login", "/signup", "/pending"].includes(location.pathname)) return null;
+  if (["/login", "/signup", "/pending"].includes(location.pathname) || location.pathname.startsWith("/chat/")) return null;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card safe-bottom">
