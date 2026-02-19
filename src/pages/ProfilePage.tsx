@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Settings, UserPlus, UserCheck, Camera, LogOut } from "lucide-react";
+import { ArrowLeft, Settings, UserPlus, UserCheck, Camera, LogOut, MessageCircle } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -192,12 +192,17 @@ const ProfilePage = () => {
               {isOwnProfile ? (
                 <button onClick={() => setEditing(true)} className="flex-1 rounded-lg bg-secondary py-2 text-sm font-medium text-foreground">Edit Profile</button>
               ) : (
-                <button onClick={handleSendRequest} disabled={friendStatus !== "none"} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium ${friendStatus === "friends" ? "bg-secondary text-foreground" : friendStatus === "none" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}>
-                  {friendStatus === "friends" && <><UserCheck size={16} /> Friends</>}
-                  {friendStatus === "sent" && "Request Sent"}
-                  {friendStatus === "received" && "Accept Request"}
-                  {friendStatus === "none" && <><UserPlus size={16} /> Add Friend</>}
-                </button>
+                <>
+                  <button onClick={handleSendRequest} disabled={friendStatus !== "none"} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium ${friendStatus === "friends" ? "bg-secondary text-foreground" : friendStatus === "none" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}>
+                    {friendStatus === "friends" && <><UserCheck size={16} /> Friends</>}
+                    {friendStatus === "sent" && "Request Sent"}
+                    {friendStatus === "received" && "Accept Request"}
+                    {friendStatus === "none" && <><UserPlus size={16} /> Add Friend</>}
+                  </button>
+                  <button onClick={() => navigate(`/chat/${userId}`)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary py-2 text-sm font-medium text-foreground">
+                    <MessageCircle size={16} /> Message
+                  </button>
+                </>
               )}
             </div>
           </>
