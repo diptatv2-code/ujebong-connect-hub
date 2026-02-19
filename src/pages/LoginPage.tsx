@@ -41,13 +41,20 @@ const LoginPage = () => {
         const { error, userId } = await signUp(email, password, name);
         if (error) throw error;
 
-        // Upload selfie
+        // Upload selfie and set as profile picture
         if (selfieFile && userId) {
-          const path = `${userId}/selfie.jpg`;
-          const { error: uploadErr } = await supabase.storage.from("selfies").upload(path, selfieFile);
+          const selfiePath = `${userId}/selfie.jpg`;
+          const avatarPath = `${userId}/avatar.jpg`;
+          const { error: uploadErr } = await supabase.storage.from("selfies").upload(selfiePath, selfieFile);
           if (!uploadErr) {
-            const { data } = supabase.storage.from("selfies").getPublicUrl(path);
-            await supabase.from("profiles").update({ selfie_url: data.publicUrl }).eq("id", userId);
+            const { data } = supabase.storage.from("selfies").getPublicUrl(selfiePath);
+            // Also upload to avatars bucket as profile picture
+            await supabase.storage.from("avatars").upload(avatarPath, selfieFile, { upsert: true });
+            const { data: avatarData } = supabase.storage.from("avatars").getPublicUrl(avatarPath);
+            await supabase.from("profiles").update({
+              selfie_url: data.publicUrl,
+              avatar_url: avatarData.publicUrl,
+            }).eq("id", userId);
           }
         }
 

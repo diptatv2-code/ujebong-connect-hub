@@ -64,8 +64,12 @@ const SelfieCapture = ({ onCapture, preview, onRetake }: SelfieCaptureProps) => 
         className="flex h-40 w-40 flex-col items-center justify-center gap-2 rounded-full border-2 border-dashed border-primary-foreground/50 bg-primary-foreground/10 text-primary-foreground/80 transition-colors hover:border-primary-foreground/70 hover:bg-primary-foreground/20"
       >
         <Camera size={32} />
-        <span className="text-xs font-medium">Take Selfie</span>
+        <span className="text-xs font-medium">Take Photo</span>
       </button>
+
+      <p className="max-w-[200px] text-center text-[11px] text-primary-foreground/60">
+        This photo will be your profile picture so others can recognize you
+      </p>
 
       <button
         type="button"
