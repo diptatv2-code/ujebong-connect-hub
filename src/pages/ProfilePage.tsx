@@ -106,6 +106,17 @@ const ProfilePage = () => {
     toast.success("Friend request sent!");
   };
 
+  const handleAcceptRequest = async () => {
+    if (!user || !friendshipId) return;
+    const { error } = await supabase.from("friendships").update({ status: "accepted" }).eq("id", friendshipId);
+    if (error) {
+      toast.error("Failed to accept request");
+      return;
+    }
+    setFriendStatus("friends");
+    toast.success("Friend request accepted!");
+  };
+
   const handleSaveProfile = async () => {
     if (!user) return;
     const safeName = editName.trim().slice(0, 100);
@@ -193,7 +204,16 @@ const ProfilePage = () => {
                 <button onClick={() => setEditing(true)} className="flex-1 rounded-lg bg-secondary py-2 text-sm font-medium text-foreground">Edit Profile</button>
               ) : (
                 <>
-                  <button onClick={handleSendRequest} disabled={friendStatus !== "none"} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium ${friendStatus === "friends" ? "bg-secondary text-foreground" : friendStatus === "none" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}>
+                  <button
+                    onClick={friendStatus === "received" ? handleAcceptRequest : handleSendRequest}
+                    disabled={friendStatus === "sent" || friendStatus === "friends"}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium ${
+                      friendStatus === "friends" ? "bg-secondary text-foreground"
+                      : friendStatus === "received" ? "bg-primary text-primary-foreground"
+                      : friendStatus === "none" ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-foreground"
+                    }`}
+                  >
                     {friendStatus === "friends" && <><UserCheck size={16} /> Friends</>}
                     {friendStatus === "sent" && "Request Sent"}
                     {friendStatus === "received" && "Accept Request"}
