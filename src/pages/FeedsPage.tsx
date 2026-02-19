@@ -85,12 +85,16 @@ const FeedsPage = () => {
 
   const handlePost = async (content: string, imageUrl?: string) => {
     if (!user) return;
-    await supabase.from("posts").insert({ user_id: user.id, content, image_url: imageUrl || null });
+    const trimmed = content.trim().slice(0, 5000);
+    if (!trimmed && !imageUrl) return;
+    await supabase.from("posts").insert({ user_id: user.id, content: trimmed, image_url: imageUrl || null });
   };
 
   const handleComment = async (postId: string, content: string) => {
     if (!user) return;
-    await supabase.from("post_comments").insert({ post_id: postId, user_id: user.id, content });
+    const trimmed = content.trim().slice(0, 2000);
+    if (!trimmed) return;
+    await supabase.from("post_comments").insert({ post_id: postId, user_id: user.id, content: trimmed });
     fetchPosts();
   };
 
