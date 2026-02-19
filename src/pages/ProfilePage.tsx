@@ -94,7 +94,9 @@ const ProfilePage = () => {
 
   const handleComment = async (postId: string, content: string) => {
     if (!user) return;
-    await supabase.from("post_comments").insert({ post_id: postId, user_id: user.id, content });
+    const trimmed = content.trim().slice(0, 2000);
+    if (!trimmed) return;
+    await supabase.from("post_comments").insert({ post_id: postId, user_id: user.id, content: trimmed });
   };
 
   const handleSendRequest = async () => {
@@ -106,8 +108,11 @@ const ProfilePage = () => {
 
   const handleSaveProfile = async () => {
     if (!user) return;
-    await supabase.from("profiles").update({ name: editName, bio: editBio }).eq("id", user.id);
-    setProfile((p: any) => ({ ...p, name: editName, bio: editBio }));
+    const safeName = editName.trim().slice(0, 100);
+    const safeBio = editBio.trim().slice(0, 500);
+    if (!safeName) { toast.error("Name cannot be empty"); return; }
+    await supabase.from("profiles").update({ name: safeName, bio: safeBio }).eq("id", user.id);
+    setProfile((p: any) => ({ ...p, name: safeName, bio: safeBio }));
     setEditing(false);
     toast.success("Profile updated!");
   };
