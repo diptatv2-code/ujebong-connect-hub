@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Share2, MoreHorizontal, Send } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Heart, MessageCircle, Share2, MoreHorizontal, Send, ThumbsUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,9 +10,18 @@ import { formatDistanceToNow } from "date-fns";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import AudioPlayer from "@/components/AudioPlayer";
 
+const REACTIONS = [
+  { type: "like", emoji: "👍", label: "Like" },
+  { type: "love", emoji: "❤️", label: "Love" },
+  { type: "haha", emoji: "😂", label: "Haha" },
+  { type: "wow", emoji: "😮", label: "Wow" },
+  { type: "sad", emoji: "😢", label: "Sad" },
+  { type: "angry", emoji: "😡", label: "Angry" },
+];
+
 interface PostCardProps {
   post: PostWithProfile;
-  onLike: (id: string) => void;
+  onReaction: (id: string, reactionType: string) => void;
   onComment: (postId: string, content: string) => void;
   currentUserId?: string;
 }
@@ -25,10 +34,12 @@ interface CommentWithProfile {
   profiles: { name: string; avatar_url: string } | null;
 }
 
-const PostCard = ({ post, onLike, onComment, currentUserId }: PostCardProps) => {
+const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps) => {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [comments, setComments] = useState<CommentWithProfile[]>([]);
+  const [showReactions, setShowReactions] = useState(false);
+  const reactionTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
 
   const timeAgo = formatDistanceToNow(new Date(post.created_at), { addSuffix: true });
@@ -81,7 +92,30 @@ const PostCard = ({ post, onLike, onComment, currentUserId }: PostCardProps) => 
     if (!error) setTimeout(fetchComments, 500);
   };
 
+  const handleLongPressStart = () => {
+    reactionTimeout.current = setTimeout(() => setShowReactions(true), 500);
+  };
+
+  const handleLongPressEnd = () => {
+    if (reactionTimeout.current) clearTimeout(reactionTimeout.current);
+  };
+
+  const handleQuickTap = () => {
+    if (showReactions) return;
+    onReaction(post.id, "like");
+  };
+
+  const currentReaction = REACTIONS.find(r => r.type === post.my_reaction);
   const avatarInitial = post.profiles?.name?.[0]?.toUpperCase() || "U";
+
+  // Build reaction summary text
+  const reactionSummary = Object.entries(post.reaction_counts || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => {
+      const r = REACTIONS.find(r => r.type === type);
+      return r ? r.emoji : "";
+    })
+    .join("");
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="border-b border-border bg-card">
@@ -111,17 +145,62 @@ const PostCard = ({ post, onLike, onComment, currentUserId }: PostCardProps) => 
 
       {(post.like_count > 0 || post.comment_count > 0) && (
         <div className="flex items-center justify-between px-4 py-2 text-xs text-muted-foreground">
-          <span>{post.like_count} likes</span>
+          <span>{reactionSummary} {post.like_count}</span>
           <span>{post.comment_count} comments</span>
         </div>
       )}
 
-      <div className="flex border-t border-border">
-        <button onClick={() => onLike(post.id)} className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors">
-          <motion.div whileTap={{ scale: 1.3 }}>
-            <Heart size={18} className={post.liked_by_me ? "fill-destructive text-destructive" : "text-muted-foreground"} />
+      {/* Reaction picker */}
+      <AnimatePresence>
+        {showReactions && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.8 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.8 }}
+            className="flex items-center gap-1 px-4 py-2 justify-center"
+          >
+            <div className="flex items-center gap-1 rounded-full bg-card border border-border shadow-lg px-2 py-1">
+              {REACTIONS.map((r) => (
+                <motion.button
+                  key={r.type}
+                  whileHover={{ scale: 1.4, y: -4 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => {
+                    onReaction(post.id, r.type);
+                    setShowReactions(false);
+                  }}
+                  className="text-xl px-1 py-0.5 transition-transform"
+                  title={r.label}
+                >
+                  {r.emoji}
+                </motion.button>
+              ))}
+            </div>
           </motion.div>
-          <span className={post.liked_by_me ? "text-destructive" : "text-muted-foreground"}>Like</span>
+        )}
+      </AnimatePresence>
+
+      <div className="flex border-t border-border">
+        <button
+          onMouseDown={handleLongPressStart}
+          onMouseUp={handleLongPressEnd}
+          onMouseLeave={handleLongPressEnd}
+          onTouchStart={handleLongPressStart}
+          onTouchEnd={handleLongPressEnd}
+          onClick={handleQuickTap}
+          className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors"
+        >
+          {currentReaction ? (
+            <>
+              <span className="text-lg">{currentReaction.emoji}</span>
+              <span className="text-primary">{currentReaction.label}</span>
+            </>
+          ) : (
+            <>
+              <ThumbsUp size={18} className="text-muted-foreground" />
+              <span className="text-muted-foreground">Like</span>
+            </>
+          )}
         </button>
         <button onClick={() => setShowComments(!showComments)} className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium text-muted-foreground">
           <MessageCircle size={18} />
