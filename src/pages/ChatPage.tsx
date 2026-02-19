@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,6 +24,22 @@ interface Profile {
   name: string;
   avatar_url: string | null;
 }
+
+// Component to display images via signed URLs
+const SignedImage = ({ path, className }: { path: string; className?: string }) => {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (path.startsWith("http")) {
+      setSrc(path);
+      return;
+    }
+    supabase.storage.from("messages").createSignedUrl(path, 3600).then(({ data }) => {
+      if (data?.signedUrl) setSrc(data.signedUrl);
+    });
+  }, [path]);
+  if (!src) return <div className={`${className} animate-pulse bg-muted rounded-lg min-h-[100px]`} />;
+  return <img src={src} alt="Shared image" className={className} loading="lazy" />;
+};
 
 const ChatPage = () => {
   const { userId } = useParams<{ userId: string }>();
@@ -122,8 +138,8 @@ const ChatPage = () => {
         setSending(false);
         return;
       }
-      const { data: urlData } = supabase.storage.from("messages").getPublicUrl(path);
-      image_url = urlData.publicUrl;
+      // Store the path, not a public URL — we'll use signed URLs to display
+      image_url = path;
     }
 
     const { error } = await supabase.from("messages").insert({
@@ -196,11 +212,9 @@ const ChatPage = () => {
                     : "bg-secondary text-secondary-foreground rounded-bl-md"
                 }`}>
                   {msg.image_url && (
-                    <img
-                      src={msg.image_url}
-                      alt="Shared image"
+                    <SignedImage
+                      path={msg.image_url}
                       className="mb-1.5 max-h-56 w-full rounded-lg object-cover"
-                      loading="lazy"
                     />
                   )}
                   {msg.content && <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>}
