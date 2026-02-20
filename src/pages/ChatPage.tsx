@@ -10,6 +10,7 @@ import VoiceRecorder from "@/components/VoiceRecorder";
 import AudioPlayer from "@/components/AudioPlayer";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
+import { compressImage } from "@/lib/image-utils";
 
 interface Message {
   id: string;
@@ -135,9 +136,9 @@ const ChatPage = () => {
     let audio_url: string | null = null;
 
     if (imageFile) {
-      const ext = imageFile.name.split(".").pop();
-      const path = `${user.id}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("messages").upload(path, imageFile);
+      const compressed = await compressImage(imageFile, { maxWidth: 1080, quality: 0.75 });
+      const path = `${user.id}/${Date.now()}.jpg`;
+      const { error } = await supabase.storage.from("messages").upload(path, compressed, { contentType: "image/jpeg" });
       if (error) {
         toast({ title: "Upload failed", description: error.message, variant: "destructive" });
         setSending(false);
