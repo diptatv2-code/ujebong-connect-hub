@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Settings, UserPlus, UserCheck, Camera, LogOut, MessageCircle } from "lucide-react";
+import { ArrowLeft, UserPlus, UserCheck, Camera, LogOut, MessageCircle, UserX, Ban, BadgeCheck } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +17,7 @@ const ProfilePage = () => {
   const [posts, setPosts] = useState<PostWithProfile[]>([]);
   const [friendStatus, setFriendStatus] = useState<"none" | "friends" | "sent" | "received">("none");
   const [friendshipId, setFriendshipId] = useState<string | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
   const [friendCount, setFriendCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -31,11 +32,13 @@ const ProfilePage = () => {
     const fetch = async () => {
       if (!userId || !user) return;
 
-      const [{ data: prof }, { data: rawPosts }, { data: friendships }] = await Promise.all([
+      const [{ data: prof }, { data: rawPosts }, { data: friendships }, { data: blocks }] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", userId).single(),
         supabase.from("posts").select("id, user_id, content, image_url, created_at").eq("user_id", userId).order("created_at", { ascending: false }),
         supabase.from("friendships").select("*").or(`requester_id.eq.${userId},addressee_id.eq.${userId}`),
+        supabase.from("blocked_users").select("id").eq("blocker_id", user.id).eq("blocked_id", userId),
       ]);
+      setIsBlocked((blocks?.length ?? 0) > 0);
 
       setProfile(prof);
       setEditName(prof?.name || "");
@@ -138,6 +141,33 @@ const ProfilePage = () => {
     toast.success("Friend request accepted!");
   };
 
+  const handleUnfriend = async () => {
+    if (!friendshipId) return;
+    await supabase.from("friendships").delete().eq("id", friendshipId);
+    setFriendStatus("none");
+    setFriendshipId(null);
+    toast.success("Unfriended");
+  };
+
+  const handleToggleBlock = async () => {
+    if (!user || !userId) return;
+    if (isBlocked) {
+      await supabase.from("blocked_users").delete().eq("blocker_id", user.id).eq("blocked_id", userId);
+      setIsBlocked(false);
+      toast.success("User unblocked");
+    } else {
+      await supabase.from("blocked_users").insert({ blocker_id: user.id, blocked_id: userId });
+      setIsBlocked(true);
+      // Also unfriend
+      if (friendshipId) {
+        await supabase.from("friendships").delete().eq("id", friendshipId);
+        setFriendStatus("none");
+        setFriendshipId(null);
+      }
+      toast.success("User blocked");
+    }
+  };
+
   const handleSaveProfile = async () => {
     if (!user) return;
     const safeName = editName.trim().slice(0, 100);
@@ -234,32 +264,42 @@ const ProfilePage = () => {
           </div>
         ) : (
           <>
-            <h1 className="text-xl font-bold text-foreground">{profile?.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-foreground">{profile?.name}</h1>
+              {profile?.is_verified && <BadgeCheck size={18} className="text-primary" />}
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">{profile?.bio || "No bio yet"}</p>
-            <p className="mt-1 text-xs text-muted-foreground">✉️ {user?.email}</p>
+            {isOwnProfile && <p className="mt-1 text-xs text-muted-foreground">✉️ {user?.email}</p>}
             <p className="mt-1 text-xs text-muted-foreground">{friendCount} friends</p>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {isOwnProfile ? (
                 <button onClick={() => setEditing(true)} className="flex-1 rounded-lg bg-secondary py-2 text-sm font-medium text-foreground">Edit Profile</button>
               ) : (
                 <>
-                  <button
-                    onClick={friendStatus === "received" ? handleAcceptRequest : handleSendRequest}
-                    disabled={friendStatus === "sent" || friendStatus === "friends"}
-                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium ${
-                      friendStatus === "friends" ? "bg-secondary text-foreground"
-                      : friendStatus === "received" ? "bg-primary text-primary-foreground"
-                      : friendStatus === "none" ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-foreground"
-                    }`}
-                  >
-                    {friendStatus === "friends" && <><UserCheck size={16} /> Friends</>}
-                    {friendStatus === "sent" && "Request Sent"}
-                    {friendStatus === "received" && "Accept Request"}
-                    {friendStatus === "none" && <><UserPlus size={16} /> Add Friend</>}
-                  </button>
+                  {friendStatus === "friends" ? (
+                    <button onClick={handleUnfriend} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary py-2 text-sm font-medium text-foreground">
+                      <UserX size={16} /> Unfriend
+                    </button>
+                  ) : (
+                    <button
+                      onClick={friendStatus === "received" ? handleAcceptRequest : handleSendRequest}
+                      disabled={friendStatus === "sent"}
+                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium ${
+                        friendStatus === "received" ? "bg-primary text-primary-foreground"
+                        : friendStatus === "none" ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-foreground"
+                      }`}
+                    >
+                      {friendStatus === "sent" && "Request Sent"}
+                      {friendStatus === "received" && "Accept Request"}
+                      {friendStatus === "none" && <><UserPlus size={16} /> Add Friend</>}
+                    </button>
+                  )}
                   <button onClick={() => navigate(`/chat/${userId}`)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-secondary py-2 text-sm font-medium text-foreground">
                     <MessageCircle size={16} /> Message
+                  </button>
+                  <button onClick={handleToggleBlock} className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${isBlocked ? "bg-destructive text-destructive-foreground" : "bg-secondary text-muted-foreground"}`}>
+                    <Ban size={16} /> {isBlocked ? "Unblock" : "Block"}
                   </button>
                 </>
               )}
@@ -272,7 +312,7 @@ const ProfilePage = () => {
         <h3 className="px-4 py-3 text-sm font-semibold text-foreground">Posts</h3>
         {posts.length > 0 ? (
           <div className="space-y-2 bg-muted">
-            {posts.map((post) => <PostCard key={post.id} post={post} onReaction={handleReaction} onComment={handleComment} currentUserId={user?.id} />)}
+            {posts.map((post) => <PostCard key={post.id} post={post} onReaction={handleReaction} onComment={handleComment} onDelete={(id) => setPosts(prev => prev.filter(p => p.id !== id))} currentUserId={user?.id} />)}
           </div>
         ) : (
           <p className="px-4 py-8 text-center text-sm text-muted-foreground">No posts yet</p>

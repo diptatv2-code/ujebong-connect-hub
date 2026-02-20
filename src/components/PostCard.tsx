@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { Heart, MessageCircle, Share2, MoreHorizontal, Send, ThumbsUp } from "lucide-react";
+import { MessageCircle, Share2, MoreHorizontal, Send, ThumbsUp, Trash2, Flag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useApproval } from "@/hooks/useApproval";
 import { toast } from "@/hooks/use-toast";
 import type { PostWithProfile } from "@/pages/FeedsPage";
 import { formatDistanceToNow } from "date-fns";
@@ -23,6 +24,7 @@ interface PostCardProps {
   post: PostWithProfile;
   onReaction: (id: string, reactionType: string) => void;
   onComment: (postId: string, content: string) => void;
+  onDelete?: (postId: string) => void;
   currentUserId?: string;
 }
 
@@ -31,20 +33,26 @@ interface CommentWithProfile {
   content: string;
   audio_url: string | null;
   created_at: string;
+  user_id: string;
   profiles: { name: string; avatar_url: string } | null;
 }
 
-const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps) => {
+const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: PostCardProps) => {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [comments, setComments] = useState<CommentWithProfile[]>([]);
   const [showReactions, setShowReactions] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [showReportDialog, setShowReportDialog] = useState(false);
   const reactionTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { isAdmin } = useApproval();
 
   const timeAgo = formatDistanceToNow(new Date(post.created_at), { addSuffix: true });
-
-  const { user } = useAuth();
+  const isOwner = currentUserId === post.user_id;
+  const canDelete = isOwner || isAdmin;
 
   const fetchComments = async () => {
     const { data } = await supabase
@@ -84,22 +92,55 @@ const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps)
       return;
     }
     const { error } = await supabase.from("post_comments").insert({
-      post_id: post.id,
-      user_id: user.id,
-      content: "",
-      audio_url: path,
+      post_id: post.id, user_id: user.id, content: "", audio_url: path,
     });
     if (!error) setTimeout(fetchComments, 500);
+  };
+
+  const handleDeletePost = async () => {
+    if (!canDelete) return;
+    await supabase.from("post_likes").delete().eq("post_id", post.id);
+    await supabase.from("post_comments").delete().eq("post_id", post.id);
+    await supabase.from("posts").delete().eq("id", post.id);
+    onDelete?.(post.id);
+    setShowMenu(false);
+    toast({ title: "Post deleted" });
+  };
+
+  const handleDeleteComment = async (commentId: string, commentUserId: string) => {
+    if (commentUserId !== currentUserId && !isAdmin) return;
+    await supabase.from("post_comments").delete().eq("id", commentId);
+    fetchComments();
+    toast({ title: "Comment deleted" });
+  };
+
+  const handleReportPost = async () => {
+    if (!user) return;
+    await supabase.from("reports").insert({
+      reporter_id: user.id, post_id: post.id, reported_user_id: post.user_id,
+      reason: reportReason.trim() || "No reason provided",
+    });
+    setShowReportDialog(false);
+    setReportReason("");
+    setShowMenu(false);
+    toast({ title: "Post reported", description: "Admin will review this content." });
+  };
+
+  const handleReportComment = async (commentId: string, commentUserId: string) => {
+    if (!user) return;
+    await supabase.from("reports").insert({
+      reporter_id: user.id, comment_id: commentId, reported_user_id: commentUserId,
+      reason: "Reported comment",
+    });
+    toast({ title: "Comment reported" });
   };
 
   const handleLongPressStart = () => {
     reactionTimeout.current = setTimeout(() => setShowReactions(true), 500);
   };
-
   const handleLongPressEnd = () => {
     if (reactionTimeout.current) clearTimeout(reactionTimeout.current);
   };
-
   const handleQuickTap = () => {
     if (showReactions) return;
     onReaction(post.id, "like");
@@ -108,10 +149,9 @@ const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps)
   const currentReaction = REACTIONS.find(r => r.type === post.my_reaction);
   const avatarInitial = post.profiles?.name?.[0]?.toUpperCase() || "U";
 
-  // Build reaction summary text
   const reactionSummary = Object.entries(post.reaction_counts || {})
     .sort((a, b) => b[1] - a[1])
-    .map(([type, count]) => {
+    .map(([type]) => {
       const r = REACTIONS.find(r => r.type === type);
       return r ? r.emoji : "";
     })
@@ -132,8 +172,39 @@ const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps)
             <p className="text-xs text-muted-foreground">{timeAgo}</p>
           </div>
         </div>
-        <button className="text-muted-foreground"><MoreHorizontal size={20} /></button>
+        <div className="relative">
+          <button className="text-muted-foreground" onClick={() => setShowMenu(!showMenu)}><MoreHorizontal size={20} /></button>
+          {showMenu && (
+            <div className="absolute right-0 top-8 z-50 w-44 rounded-lg border border-border bg-card shadow-lg py-1">
+              {canDelete && (
+                <button onClick={handleDeletePost} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-muted">
+                  <Trash2 size={14} /> Delete Post
+                </button>
+              )}
+              {!isOwner && (
+                <button onClick={() => { setShowReportDialog(true); setShowMenu(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted">
+                  <Flag size={14} /> Report Post
+                </button>
+              )}
+              <button onClick={() => setShowMenu(false)} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:bg-muted">
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Report Dialog */}
+      {showReportDialog && (
+        <div className="mx-4 mb-2 rounded-lg border border-border bg-secondary p-3 space-y-2">
+          <p className="text-xs font-semibold text-foreground">Report this post</p>
+          <input value={reportReason} onChange={e => setReportReason(e.target.value)} placeholder="Reason (optional)" className="w-full rounded bg-card border border-border px-2 py-1 text-xs text-foreground outline-none" />
+          <div className="flex gap-2">
+            <button onClick={handleReportPost} className="rounded bg-destructive px-3 py-1 text-xs text-destructive-foreground">Submit</button>
+            <button onClick={() => setShowReportDialog(false)} className="rounded bg-muted px-3 py-1 text-xs text-foreground">Cancel</button>
+          </div>
+        </div>
+      )}
 
       <p className="px-4 pb-2 text-sm leading-relaxed text-foreground">{post.content}</p>
 
@@ -153,27 +224,13 @@ const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps)
       {/* Reaction picker */}
       <AnimatePresence>
         {showReactions && (
-          <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.8 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.8 }}
-            className="flex items-center gap-1 px-4 py-2 justify-center"
-          >
+          <motion.div initial={{ opacity: 0, y: 10, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.8 }} className="flex items-center gap-1 px-4 py-2 justify-center">
             <div className="flex items-center gap-1 rounded-full bg-card border border-border shadow-lg px-2 py-1">
               {REACTIONS.map((r) => (
-                <motion.button
-                  key={r.type}
-                  whileHover={{ scale: 1.4, y: -4 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => {
-                    onReaction(post.id, r.type);
-                    setShowReactions(false);
-                  }}
-                  className="text-xl px-1 py-0.5 transition-transform"
-                  title={r.label}
-                >
-                  {r.emoji}
-                </motion.button>
+                <motion.button key={r.type} whileHover={{ scale: 1.4, y: -4 }} whileTap={{ scale: 0.9 }}
+                  onClick={() => { onReaction(post.id, r.type); setShowReactions(false); }}
+                  className="text-xl px-1 py-0.5 transition-transform" title={r.label}
+                >{r.emoji}</motion.button>
               ))}
             </div>
           </motion.div>
@@ -181,34 +238,21 @@ const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps)
       </AnimatePresence>
 
       <div className="flex border-t border-border">
-        <button
-          onMouseDown={handleLongPressStart}
-          onMouseUp={handleLongPressEnd}
-          onMouseLeave={handleLongPressEnd}
-          onTouchStart={handleLongPressStart}
-          onTouchEnd={handleLongPressEnd}
-          onClick={handleQuickTap}
+        <button onMouseDown={handleLongPressStart} onMouseUp={handleLongPressEnd} onMouseLeave={handleLongPressEnd}
+          onTouchStart={handleLongPressStart} onTouchEnd={handleLongPressEnd} onClick={handleQuickTap}
           className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors"
         >
           {currentReaction ? (
-            <>
-              <span className="text-lg">{currentReaction.emoji}</span>
-              <span className="text-primary">{currentReaction.label}</span>
-            </>
+            <><span className="text-lg">{currentReaction.emoji}</span><span className="text-primary">{currentReaction.label}</span></>
           ) : (
-            <>
-              <ThumbsUp size={18} className="text-muted-foreground" />
-              <span className="text-muted-foreground">Like</span>
-            </>
+            <><ThumbsUp size={18} className="text-muted-foreground" /><span className="text-muted-foreground">Like</span></>
           )}
         </button>
         <button onClick={() => setShowComments(!showComments)} className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium text-muted-foreground">
-          <MessageCircle size={18} />
-          Comment
+          <MessageCircle size={18} /> Comment
         </button>
         <button className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium text-muted-foreground">
-          <Share2 size={18} />
-          Share
+          <Share2 size={18} /> Share
         </button>
       </div>
 
@@ -217,7 +261,7 @@ const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps)
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-t border-border">
             <div className="space-y-3 px-4 py-3">
               {comments.map((comment) => (
-                <div key={comment.id} className="flex gap-2">
+                <div key={comment.id} className="flex gap-2 group">
                   {comment.profiles?.avatar_url ? (
                     <img src={comment.profiles.avatar_url} alt="" className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-full bg-muted" />
                   ) : (
@@ -225,10 +269,20 @@ const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps)
                       {comment.profiles?.name?.[0]?.toUpperCase() || "U"}
                     </div>
                   )}
-                  <div className="rounded-2xl bg-secondary px-3 py-2">
-                    <p className="text-xs font-semibold text-foreground">{comment.profiles?.name || "User"}</p>
-                    {comment.audio_url && <AudioPlayer path={comment.audio_url} />}
-                    {comment.content && <p className="text-xs text-foreground">{comment.content}</p>}
+                  <div className="flex-1">
+                    <div className="rounded-2xl bg-secondary px-3 py-2">
+                      <p className="text-xs font-semibold text-foreground">{comment.profiles?.name || "User"}</p>
+                      {comment.audio_url && <AudioPlayer path={comment.audio_url} />}
+                      {comment.content && <p className="text-xs text-foreground">{comment.content}</p>}
+                    </div>
+                    <div className="flex gap-3 mt-0.5 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {(comment.user_id === currentUserId || isAdmin) && (
+                        <button onClick={() => handleDeleteComment(comment.id, comment.user_id)} className="text-[10px] text-destructive">Delete</button>
+                      )}
+                      {comment.user_id !== currentUserId && (
+                        <button onClick={() => handleReportComment(comment.id, comment.user_id)} className="text-[10px] text-muted-foreground">Report</button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -237,10 +291,7 @@ const PostCard = ({ post, onReaction, onComment, currentUserId }: PostCardProps)
             <div className="flex items-center gap-2 border-t border-border px-4 py-2">
               <VoiceRecorder onRecordingComplete={handleVoiceComment} compact />
               <div className="flex flex-1 items-center rounded-full bg-secondary px-3 py-1.5">
-                <input
-                  type="text"
-                  placeholder="Write a comment..."
-                  value={commentText}
+                <input type="text" placeholder="Write a comment..." value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSendComment()}
                   className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"

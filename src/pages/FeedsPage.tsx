@@ -136,7 +136,7 @@ const FeedsPage = () => {
           <p className="text-center text-sm text-muted-foreground py-12">No posts yet. Be the first to share!</p>
         ) : (
           posts.map((post) => (
-            <PostCard key={post.id} post={post} onReaction={handleReaction} onComment={handleComment} currentUserId={user?.id} />
+            <PostCard key={post.id} post={post} onReaction={handleReaction} onComment={handleComment} onDelete={(id) => setPosts(prev => prev.filter(p => p.id !== id))} currentUserId={user?.id} />
           ))
         )}
       </div>
