@@ -430,6 +430,9 @@ export type Database = {
           bio: string | null
           cover_photo_url: string | null
           created_at: string
+          email_verification_expires_at: string | null
+          email_verification_token: string | null
+          email_verified: boolean
           id: string
           is_approved: boolean
           is_verified: boolean
@@ -442,6 +445,9 @@ export type Database = {
           bio?: string | null
           cover_photo_url?: string | null
           created_at?: string
+          email_verification_expires_at?: string | null
+          email_verification_token?: string | null
+          email_verified?: boolean
           id: string
           is_approved?: boolean
           is_verified?: boolean
@@ -454,6 +460,9 @@ export type Database = {
           bio?: string | null
           cover_photo_url?: string | null
           created_at?: string
+          email_verification_expires_at?: string | null
+          email_verification_token?: string | null
+          email_verified?: boolean
           id?: string
           is_approved?: boolean
           is_verified?: boolean

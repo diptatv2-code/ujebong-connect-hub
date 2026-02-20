@@ -24,8 +24,10 @@ const LoginPage = () => {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<HTMLDivElement>(null);
   const turnstileWidgetId = useRef<string | null>(null);
+  const [unverifiedUserId, setUnverifiedUserId] = useState<string | null>(null);
+  const [resendingVerification, setResendingVerification] = useState(false);
   const navigate = useNavigate();
-  const { signUp, signIn } = useAuth();
+  const { signUp, signIn, resendVerification } = useAuth();
 
   // Load Turnstile script
   useEffect(() => {
@@ -132,13 +134,19 @@ const LoginPage = () => {
 
         setShowVerifyMessage(true);
       } else {
-        const { error } = await signIn(email, password);
+        const { error, emailVerified } = await signIn(email, password);
         if (error) {
-          if (error.message?.includes("Email not confirmed")) {
-            toast.error("Please verify your email before logging in. Check your inbox.");
-          } else {
-            throw error;
+          throw error;
+        }
+        if (emailVerified === false) {
+          // Get user id for resend functionality
+          const { data: signInData } = await supabase.auth.signInWithPassword({ email, password });
+          const uid = signInData?.user?.id;
+          if (uid) {
+            await supabase.auth.signOut();
+            setUnverifiedUserId(uid);
           }
+          setShowVerifyMessage(true);
           return;
         }
         toast.success("Welcome back!");
@@ -151,6 +159,20 @@ const LoginPage = () => {
     }
   };
 
+  const handleResendVerification = async () => {
+    if (!unverifiedUserId) return;
+    setResendingVerification(true);
+    try {
+      const { error } = await resendVerification(unverifiedUserId);
+      if (error) throw error;
+      toast.success("Verification email sent! Check your inbox.");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resend verification email");
+    } finally {
+      setResendingVerification(false);
+    }
+  };
+
   if (showVerifyMessage) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-primary px-6">
@@ -160,11 +182,21 @@ const LoginPage = () => {
           </div>
           <h2 className="text-xl font-bold text-primary-foreground">Check your email</h2>
           <p className="mt-2 text-sm text-primary-foreground/70">
-            We've sent a verification link to <strong className="text-primary-foreground">{email}</strong>. Please click the link to verify your account before logging in.
+            We've sent a verification link to <strong className="text-primary-foreground">{email}</strong> from <strong className="text-primary-foreground">noreply@ujebong.com</strong>. Please click the link to verify your account.
           </p>
-          <button onClick={() => { setShowVerifyMessage(false); setIsSignUp(false); }} className="mt-6 rounded-xl bg-primary-foreground px-6 py-3 text-sm font-bold text-primary">
-            Go to Login
-          </button>
+          <div className="mt-6 flex flex-col gap-3">
+            <button
+              onClick={handleResendVerification}
+              disabled={resendingVerification}
+              className="rounded-xl bg-primary-foreground/20 px-6 py-3 text-sm font-bold text-primary-foreground disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {resendingVerification && <Loader2 size={16} className="animate-spin" />}
+              Resend Verification Email
+            </button>
+            <button onClick={() => { setShowVerifyMessage(false); setIsSignUp(false); }} className="rounded-xl bg-primary-foreground px-6 py-3 text-sm font-bold text-primary">
+              Go to Login
+            </button>
+          </div>
         </motion.div>
       </div>
     );

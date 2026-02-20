@@ -7,8 +7,9 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null; userId?: string }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null; emailVerified?: boolean }>;
   signOut: () => Promise<void>;
+  resendVerification: (userId: string) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,25 +42,55 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       options: { data: { name } },
     });
     if (!error && data.user) {
+      // Send custom verification email from ujebong.com domain
+      supabase.functions.invoke("send-verification-email", {
+        body: { user_id: data.user.id },
+      }).catch(console.error);
+
       // Notify admin about new signup (fire & forget)
       supabase.functions.invoke("notify-admin", {
         body: { user_name: name },
       }).catch(console.error);
+
+      // Sign out immediately - user must verify email first
+      await supabase.auth.signOut();
     }
     return { error: error as Error | null, userId: data.user?.id };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error as Error | null };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error: error as Error | null };
+
+    // Check if email is verified in profiles
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email_verified")
+      .eq("id", data.user.id)
+      .single();
+
+    if (!profile?.email_verified) {
+      // Sign out unverified user
+      await supabase.auth.signOut();
+      return { error: null, emailVerified: false };
+    }
+
+    return { error: null, emailVerified: true };
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
   };
 
+  const resendVerification = async (userId: string) => {
+    const { error } = await supabase.functions.invoke("send-verification-email", {
+      body: { user_id: userId },
+    });
+    return { error: error as Error | null };
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, resendVerification }}>
       {children}
     </AuthContext.Provider>
   );
