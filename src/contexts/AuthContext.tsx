@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!error && data.user) {
       // Notify admin about new signup (fire & forget)
       supabase.functions.invoke("notify-admin", {
-        body: { user_id: data.user.id, user_name: name, user_email: email },
+        body: { user_name: name },
       }).catch(console.error);
     }
     return { error: error as Error | null, userId: data.user?.id };
