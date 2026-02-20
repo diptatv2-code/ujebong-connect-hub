@@ -11,7 +11,7 @@ const AppHeader = () => {
   const { isAdmin } = useApproval();
   const { unreadCount } = useNotifications();
 
-  if (["/login", "/signup", "/pending"].includes(location.pathname)) return null;
+  if (["/login", "/signup", "/pending"].includes(location.pathname) || location.pathname.startsWith("/chat/")) return null;
 
   const initial = user?.user_metadata?.name?.[0]?.toUpperCase() || "U";
 
