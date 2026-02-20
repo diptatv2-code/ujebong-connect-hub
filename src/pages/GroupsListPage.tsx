@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, Globe, Lock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +25,7 @@ const GroupsListPage = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newIsPublic, setNewIsPublic] = useState(true);
 
   const fetchGroups = async () => {
     if (!user) return;
@@ -39,21 +40,32 @@ const GroupsListPage = () => {
 
   const handleCreate = async () => {
     if (!user || !newName.trim()) return;
-    const { data, error } = await supabase.from("groups").insert({ name: newName.trim(), description: newDesc.trim() || null, created_by: user.id }).select().single();
+    const { data, error } = await supabase.from("groups").insert({
+      name: newName.trim(),
+      description: newDesc.trim() || null,
+      created_by: user.id,
+      is_public: newIsPublic,
+    }).select().single();
     if (error) { toast.error("Failed to create group"); return; }
-    // Auto-join as admin
     await supabase.from("group_memberships").insert({ group_id: data.id, user_id: user.id, role: "admin" });
     toast.success("Group created!");
     setShowCreate(false);
     setNewName("");
     setNewDesc("");
+    setNewIsPublic(true);
     fetchGroups();
   };
 
   const handleJoin = async (groupId: string) => {
     if (!user) return;
+    const group = groups.find(g => g.id === groupId);
+    if (group && !group.is_public) {
+      // Request to join private group
+      await supabase.from("group_join_requests").insert({ group_id: groupId, user_id: user.id });
+      toast.success("Join request sent!");
+      return;
+    }
     await supabase.from("group_memberships").insert({ group_id: groupId, user_id: user.id });
-    await supabase.from("groups").update({ member_count: (groups.find(g => g.id === groupId)?.member_count || 0) + 1 }).eq("id", groupId);
     toast.success("Joined group!");
     fetchGroups();
   };
@@ -71,6 +83,20 @@ const GroupsListPage = () => {
         <div className="border-b border-border bg-card p-4 space-y-2">
           <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Group name" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground outline-none" />
           <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Description (optional)" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground outline-none" />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setNewIsPublic(true)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${newIsPublic ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
+            >
+              <Globe size={12} /> Public
+            </button>
+            <button
+              onClick={() => setNewIsPublic(false)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${!newIsPublic ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
+            >
+              <Lock size={12} /> Private
+            </button>
+          </div>
           <div className="flex gap-2">
             <button onClick={handleCreate} className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">Create Group</button>
             <button onClick={() => setShowCreate(false)} className="rounded-lg bg-secondary px-4 py-2 text-xs font-medium text-foreground">Cancel</button>
@@ -93,12 +119,17 @@ const GroupsListPage = () => {
                   <Users size={20} className="text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-foreground">{g.name}</p>
-                  <p className="text-xs text-muted-foreground">{g.member_count} members</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-foreground">{g.name}</p>
+                    {g.is_public ? <Globe size={10} className="text-muted-foreground" /> : <Lock size={10} className="text-muted-foreground" />}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{g.member_count} members · {g.is_public ? "Public" : "Private"}</p>
                 </div>
               </div>
               {!g.isMember ? (
-                <button onClick={() => handleJoin(g.id)} className="rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Join</button>
+                <button onClick={() => handleJoin(g.id)} className="rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+                  {g.is_public ? "Join" : "Request"}
+                </button>
               ) : (
                 <span className="text-xs text-muted-foreground">Joined</span>
               )}
