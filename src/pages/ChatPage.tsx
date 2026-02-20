@@ -13,7 +13,7 @@ import { formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { compressImage } from "@/lib/image-utils";
 import { useVoiceCall } from "@/hooks/useVoiceCall";
-import { IncomingCallOverlay, ActiveCallBar } from "@/components/CallUI";
+import { IncomingCallOverlay, ActiveCallScreen } from "@/components/CallUI";
 
 interface Message {
   id: string;
@@ -67,6 +67,7 @@ const ChatPage = () => {
     callStatus,
     callId,
     isMuted,
+    isSpeaker,
     callDuration,
     startCall,
     answerCall,
@@ -221,11 +222,13 @@ const ChatPage = () => {
 
       <AnimatePresence>
         {(callStatus === "calling" || callStatus === "connected") && partner && (
-          <ActiveCallBar
+          <ActiveCallScreen
             partnerName={partner.name}
+            partnerAvatar={partner.avatar_url || undefined}
             callStatus={callStatus}
             duration={callDuration}
             isMuted={isMuted}
+            isSpeaker={isSpeaker}
             onToggleMute={toggleMute}
             onToggleSpeaker={toggleSpeaker}
             onEndCall={endCall}
