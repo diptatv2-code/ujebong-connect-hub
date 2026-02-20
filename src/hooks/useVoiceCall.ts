@@ -12,9 +12,21 @@ interface UseVoiceCallOptions {
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
-  { urls: "stun:stun3.l.google.com:19302" },
-  { urls: "stun:stun4.l.google.com:19302" },
+  {
+    urls: "turn:openrelay.metered.ca:80",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443?transport=tcp",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
 ];
 
 export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions) {
@@ -31,10 +43,11 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
   const callStartTime = useRef<number | null>(null);
-  // Store the local offer so we can re-send it when receiver requests
   const pendingOffer = useRef<RTCSessionDescriptionInit | null>(null);
+  // Buffer ICE candidates until remote description is set
+  const iceCandidateBuffer = useRef<RTCIceCandidateInit[]>([]);
+  const hasRemoteDescription = useRef(false);
 
-  // Clean up
   const cleanup = useCallback(() => {
     if (durationInterval.current) {
       clearInterval(durationInterval.current);
@@ -54,51 +67,87 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     }
     pendingOffer.current = null;
     callStartTime.current = null;
+    iceCandidateBuffer.current = [];
+    hasRemoteDescription.current = false;
     setCallDuration(0);
   }, []);
 
-  // Get user media
   const getMedia = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     localStream.current = stream;
     return stream;
   }, []);
 
-  // Create peer connection
+  // Safely add ICE candidate (buffer if remote description not set yet)
+  const safeAddIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
+    if (!peerConnection.current) return;
+    if (hasRemoteDescription.current) {
+      try {
+        await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.error("[Call] Error adding ICE candidate:", e);
+      }
+    } else {
+      console.log("[Call] Buffering ICE candidate (no remote desc yet)");
+      iceCandidateBuffer.current.push(candidate);
+    }
+  }, []);
+
+  // Flush buffered ICE candidates after remote description is set
+  const flushIceCandidates = useCallback(async () => {
+    if (!peerConnection.current) return;
+    hasRemoteDescription.current = true;
+    console.log("[Call] Flushing", iceCandidateBuffer.current.length, "buffered ICE candidates");
+    for (const candidate of iceCandidateBuffer.current) {
+      try {
+        await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.error("[Call] Error adding buffered ICE candidate:", e);
+      }
+    }
+    iceCandidateBuffer.current = [];
+  }, []);
+
   const createPeerConnection = useCallback(() => {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
     pc.ontrack = (event) => {
-      console.log("[Call] Remote track received", event.streams.length);
+      console.log("[Call] Remote track received");
       if (!remoteAudio.current) {
         remoteAudio.current = new Audio();
         remoteAudio.current.autoplay = true;
       }
       remoteAudio.current.srcObject = event.streams[0];
-      remoteAudio.current.play().catch(console.error);
+      remoteAudio.current.play().catch((e) => console.error("[Call] Audio play error:", e));
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log("[Call] ICE state:", pc.iceConnectionState);
-      if (pc.iceConnectionState === "connected") {
+      console.log("[Call] ICE connection state:", pc.iceConnectionState);
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
         setCallStatus("connected");
-        callStartTime.current = Date.now();
-        durationInterval.current = setInterval(() => {
-          if (callStartTime.current) {
-            setCallDuration(Math.floor((Date.now() - callStartTime.current) / 1000));
-          }
-        }, 1000);
+        if (!callStartTime.current) {
+          callStartTime.current = Date.now();
+          durationInterval.current = setInterval(() => {
+            if (callStartTime.current) {
+              setCallDuration(Math.floor((Date.now() - callStartTime.current) / 1000));
+            }
+          }, 1000);
+        }
       }
       if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+        console.log("[Call] ICE failed/disconnected");
         endCall();
       }
+    };
+
+    pc.onicegatheringstatechange = () => {
+      console.log("[Call] ICE gathering state:", pc.iceGatheringState);
     };
 
     peerConnection.current = pc;
     return pc;
   }, []);
 
-  // End call
   const endCall = useCallback(async () => {
     if (channelRef.current) {
       channelRef.current.send({
@@ -127,7 +176,7 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     setCallId(null);
   }, [user, callId, cleanup]);
 
-  // Set up signaling channel for CALLER
+  // Signaling for CALLER
   const setupCallerSignaling = useCallback(
     (currentCallId: string, pc: RTCPeerConnection) => {
       if (!user) return;
@@ -137,8 +186,7 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       });
 
       channel
-        .on("broadcast", { event: "ready" }, async () => {
-          // Receiver is ready — re-send the offer
+        .on("broadcast", { event: "ready" }, () => {
           console.log("[Call] Receiver ready, sending offer");
           if (pendingOffer.current) {
             channel.send({
@@ -149,30 +197,29 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
           }
         })
         .on("broadcast", { event: "answer" }, async ({ payload }) => {
-          console.log("[Call] Got answer");
-          if (!peerConnection.current) return;
-          await peerConnection.current.setRemoteDescription(
-            new RTCSessionDescription(payload.sdp)
-          );
-        })
-        .on("broadcast", { event: "ice-candidate" }, async ({ payload }) => {
+          console.log("[Call] Got answer from receiver");
           if (!peerConnection.current) return;
           try {
-            await peerConnection.current.addIceCandidate(
-              new RTCIceCandidate(payload.candidate)
+            await peerConnection.current.setRemoteDescription(
+              new RTCSessionDescription(payload.sdp)
             );
+            await flushIceCandidates();
           } catch (e) {
-            console.error("[Call] Error adding ICE candidate:", e);
+            console.error("[Call] Error setting remote description:", e);
           }
+        })
+        .on("broadcast", { event: "ice-candidate" }, async ({ payload }) => {
+          await safeAddIceCandidate(payload.candidate);
         })
         .on("broadcast", { event: "hangup" }, () => {
           endCall();
         })
-        .subscribe();
+        .subscribe((status) => {
+          console.log("[Call] Caller channel status:", status);
+        });
 
       channelRef.current = channel;
 
-      // Send ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           channel.send({
@@ -183,10 +230,10 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
         }
       };
     },
-    [user, endCall]
+    [user, endCall, safeAddIceCandidate, flushIceCandidates]
   );
 
-  // Set up signaling channel for RECEIVER
+  // Signaling for RECEIVER
   const setupReceiverSignaling = useCallback(
     (currentCallId: string, pc: RTCPeerConnection) => {
       if (!user) return;
@@ -197,47 +244,57 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
 
       channel
         .on("broadcast", { event: "offer" }, async ({ payload }) => {
-          console.log("[Call] Got offer, creating answer");
-          if (!peerConnection.current) return;
-          await peerConnection.current.setRemoteDescription(
-            new RTCSessionDescription(payload.sdp)
-          );
-          const answer = await peerConnection.current.createAnswer();
-          await peerConnection.current.setLocalDescription(answer);
-          channel.send({
-            type: "broadcast",
-            event: "answer",
-            payload: { sdp: answer, from: user.id },
-          });
-        })
-        .on("broadcast", { event: "ice-candidate" }, async ({ payload }) => {
+          console.log("[Call] Got offer from caller");
           if (!peerConnection.current) return;
           try {
-            await peerConnection.current.addIceCandidate(
-              new RTCIceCandidate(payload.candidate)
+            await peerConnection.current.setRemoteDescription(
+              new RTCSessionDescription(payload.sdp)
             );
+            await flushIceCandidates();
+            const answer = await peerConnection.current.createAnswer();
+            await peerConnection.current.setLocalDescription(answer);
+            console.log("[Call] Sending answer to caller");
+            channel.send({
+              type: "broadcast",
+              event: "answer",
+              payload: { sdp: answer, from: user.id },
+            });
           } catch (e) {
-            console.error("[Call] Error adding ICE candidate:", e);
+            console.error("[Call] Error handling offer:", e);
           }
+        })
+        .on("broadcast", { event: "ice-candidate" }, async ({ payload }) => {
+          await safeAddIceCandidate(payload.candidate);
         })
         .on("broadcast", { event: "hangup" }, () => {
           endCall();
         })
         .subscribe((status) => {
+          console.log("[Call] Receiver channel status:", status);
           if (status === "SUBSCRIBED") {
-            // Tell the caller we're ready to receive the offer
-            console.log("[Call] Receiver subscribed, sending ready signal");
-            channel.send({
-              type: "broadcast",
-              event: "ready",
-              payload: { from: user.id },
-            });
+            // Tell caller we're ready
+            console.log("[Call] Sending ready signal to caller");
+            // Small delay to ensure caller is listening
+            setTimeout(() => {
+              channel.send({
+                type: "broadcast",
+                event: "ready",
+                payload: { from: user.id },
+              });
+            }, 500);
+            // Send again after a longer delay as backup
+            setTimeout(() => {
+              channel.send({
+                type: "broadcast",
+                event: "ready",
+                payload: { from: user.id },
+              });
+            }, 2000);
           }
         });
 
       channelRef.current = channel;
 
-      // Send ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           channel.send({
@@ -248,7 +305,7 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
         }
       };
     },
-    [user, endCall]
+    [user, endCall, safeAddIceCandidate, flushIceCandidates]
   );
 
   // Start outgoing call
@@ -262,7 +319,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
 
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      // Create call session in DB
       const { data: session, error } = await supabase
         .from("call_sessions")
         .insert({
@@ -282,15 +338,14 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
 
       setCallId(session.id);
 
-      // Create the offer and store it
+      // Create offer first
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       pendingOffer.current = offer;
+      console.log("[Call] Offer created, setting up signaling");
 
-      // Set up signaling — when receiver sends "ready", we'll re-send the offer
+      // Set up signaling — receiver will send "ready" when joined
       setupCallerSignaling(session.id, pc);
-
-      console.log("[Call] Call created, waiting for receiver to join...");
     } catch (err) {
       console.error("[Call] Failed to start call:", err);
       cleanup();
@@ -305,18 +360,16 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
 
       try {
         setCallId(incomingCallId);
-        setCallStatus("calling"); // show "connecting" state
+        setCallStatus("calling");
 
         const stream = await getMedia();
         const pc = createPeerConnection();
 
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-        // Set up receiver signaling — will send "ready" once subscribed
-        // which triggers the caller to re-send the offer
+        // Set up receiver signaling — sends "ready" once subscribed
         setupReceiverSignaling(incomingCallId, pc);
 
-        // Update call status in DB
         await supabase
           .from("call_sessions")
           .update({ status: "connected", started_at: new Date().toISOString() })
@@ -354,7 +407,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     [user, cleanup]
   );
 
-  // Toggle mute
   const toggleMute = useCallback(() => {
     if (localStream.current) {
       localStream.current.getAudioTracks().forEach((track) => {
@@ -364,7 +416,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     }
   }, []);
 
-  // Toggle speaker
   const toggleSpeaker = useCallback(() => {
     setIsSpeaker((s) => !s);
     if (remoteAudio.current && "setSinkId" in remoteAudio.current) {
@@ -402,7 +453,7 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     };
   }, [user, callStatus, onIncomingCall]);
 
-  // Listen for call status changes (e.g., caller hangs up before answer)
+  // Listen for call status changes
   useEffect(() => {
     if (!callId || !user) return;
 
@@ -432,7 +483,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     };
   }, [callId, user, cleanup]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       cleanup();
