@@ -12,6 +12,9 @@ interface UseVoiceCallOptions {
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:19302" },
   {
     urls: "turn:openrelay.metered.ca:80",
     username: "openrelayproject",
@@ -26,6 +29,11 @@ const ICE_SERVERS: RTCIceServer[] = [
     urls: "turn:openrelay.metered.ca:443?transport=tcp",
     username: "openrelayproject",
     credential: "openrelayproject",
+  },
+  {
+    urls: "turn:relay1.expressturn.com:443",
+    username: "ef4JXHQEUG3AUBHYAV",
+    credential: "H5F9wy3XpG2cMXNz",
   },
 ];
 
@@ -44,9 +52,38 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
   const callStartTime = useRef<number | null>(null);
   const pendingOffer = useRef<RTCSessionDescriptionInit | null>(null);
-  // Buffer ICE candidates until remote description is set
   const iceCandidateBuffer = useRef<RTCIceCandidateInit[]>([]);
   const hasRemoteDescription = useRef(false);
+  // Use refs for values needed inside createPeerConnection to avoid stale closures
+  const callIdRef = useRef<string | null>(null);
+  const endCallRef = useRef<() => void>(() => {});
+
+  // Keep callIdRef in sync
+  useEffect(() => {
+    callIdRef.current = callId;
+  }, [callId]);
+
+  // Create audio element once (important for mobile autoplay)
+  useEffect(() => {
+    if (!remoteAudio.current) {
+      const audio = document.createElement("audio");
+      audio.autoplay = true;
+      (audio as any).playsInline = true;
+      audio.setAttribute("playsinline", "true");
+      audio.setAttribute("webkit-playsinline", "true");
+      // Append to DOM for mobile compatibility
+      audio.style.display = "none";
+      document.body.appendChild(audio);
+      remoteAudio.current = audio;
+    }
+    return () => {
+      if (remoteAudio.current) {
+        remoteAudio.current.srcObject = null;
+        remoteAudio.current.remove();
+        remoteAudio.current = null;
+      }
+    };
+  }, []);
 
   const cleanup = useCallback(() => {
     if (durationInterval.current) {
@@ -65,6 +102,9 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
+    if (remoteAudio.current) {
+      remoteAudio.current.srcObject = null;
+    }
     pendingOffer.current = null;
     callStartTime.current = null;
     iceCandidateBuffer.current = [];
@@ -78,7 +118,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     return stream;
   }, []);
 
-  // Safely add ICE candidate (buffer if remote description not set yet)
   const safeAddIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
     if (!peerConnection.current) return;
     if (hasRemoteDescription.current) {
@@ -93,7 +132,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     }
   }, []);
 
-  // Flush buffered ICE candidates after remote description is set
   const flushIceCandidates = useCallback(async () => {
     if (!peerConnection.current) return;
     hasRemoteDescription.current = true;
@@ -109,16 +147,33 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
   }, []);
 
   const createPeerConnection = useCallback(() => {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({
+      iceServers: ICE_SERVERS,
+      iceCandidatePoolSize: 10,
+    });
 
     pc.ontrack = (event) => {
-      console.log("[Call] Remote track received");
-      if (!remoteAudio.current) {
-        remoteAudio.current = new Audio();
-        remoteAudio.current.autoplay = true;
+      console.log("[Call] Remote track received, kind:", event.track.kind, "readyState:", event.track.readyState);
+      if (remoteAudio.current) {
+        // Use streams if available, otherwise create a new MediaStream from the track
+        const stream = event.streams?.[0] || new MediaStream([event.track]);
+        remoteAudio.current.srcObject = stream;
+        // Force play with user gesture workaround
+        const playPromise = remoteAudio.current.play();
+        if (playPromise) {
+          playPromise.catch((e) => {
+            console.warn("[Call] Audio autoplay blocked, retrying:", e);
+            // Retry on next user interaction
+            const resumeAudio = () => {
+              remoteAudio.current?.play().catch(() => {});
+              document.removeEventListener("touchstart", resumeAudio);
+              document.removeEventListener("click", resumeAudio);
+            };
+            document.addEventListener("touchstart", resumeAudio, { once: true });
+            document.addEventListener("click", resumeAudio, { once: true });
+          });
+        }
       }
-      remoteAudio.current.srcObject = event.streams[0];
-      remoteAudio.current.play().catch((e) => console.error("[Call] Audio play error:", e));
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -134,14 +189,36 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
           }, 1000);
         }
       }
-      if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
-        console.log("[Call] ICE failed/disconnected");
-        endCall();
+      if (pc.iceConnectionState === "disconnected") {
+        console.warn("[Call] ICE disconnected, waiting for recovery...");
+        // Give ICE a chance to recover before ending
+        setTimeout(() => {
+          if (peerConnection.current?.iceConnectionState === "disconnected") {
+            console.log("[Call] ICE still disconnected, ending call");
+            endCallRef.current();
+          }
+        }, 5000);
       }
+      if (pc.iceConnectionState === "failed") {
+        console.error("[Call] ICE failed");
+        endCallRef.current();
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log("[Call] Connection state:", pc.connectionState);
     };
 
     pc.onicegatheringstatechange = () => {
       console.log("[Call] ICE gathering state:", pc.iceGatheringState);
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log("[Call] Local ICE candidate:", event.candidate.type, event.candidate.protocol);
+      } else {
+        console.log("[Call] ICE gathering complete");
+      }
     };
 
     peerConnection.current = pc;
@@ -149,6 +226,8 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
   }, []);
 
   const endCall = useCallback(async () => {
+    const currentCallId = callIdRef.current;
+    
     if (channelRef.current) {
       channelRef.current.send({
         type: "broadcast",
@@ -157,7 +236,7 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       });
     }
 
-    if (callId) {
+    if (currentCallId) {
       const duration = callStartTime.current
         ? Math.floor((Date.now() - callStartTime.current) / 1000)
         : 0;
@@ -168,15 +247,19 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
           ended_at: new Date().toISOString(),
           duration_seconds: duration,
         })
-        .eq("id", callId);
+        .eq("id", currentCallId);
     }
 
     cleanup();
     setCallStatus("idle");
     setCallId(null);
-  }, [user, callId, cleanup]);
+  }, [user, cleanup]);
 
-  // Signaling for CALLER
+  // Keep endCallRef in sync
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
+
   const setupCallerSignaling = useCallback(
     (currentCallId: string, pc: RTCPeerConnection) => {
       if (!user) return;
@@ -204,15 +287,17 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
               new RTCSessionDescription(payload.sdp)
             );
             await flushIceCandidates();
+            console.log("[Call] Remote description set (answer), ICE candidates flushed");
           } catch (e) {
             console.error("[Call] Error setting remote description:", e);
           }
         })
         .on("broadcast", { event: "ice-candidate" }, async ({ payload }) => {
+          console.log("[Call] Received remote ICE candidate");
           await safeAddIceCandidate(payload.candidate);
         })
         .on("broadcast", { event: "hangup" }, () => {
-          endCall();
+          endCallRef.current();
         })
         .subscribe((status) => {
           console.log("[Call] Caller channel status:", status);
@@ -220,20 +305,23 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
 
       channelRef.current = channel;
 
+      // Override onicecandidate to send via signaling channel
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log("[Call] Sending ICE candidate:", event.candidate.type, event.candidate.protocol);
           channel.send({
             type: "broadcast",
             event: "ice-candidate",
             payload: { candidate: event.candidate.toJSON(), from: user.id },
           });
+        } else {
+          console.log("[Call] ICE gathering complete");
         }
       };
     },
-    [user, endCall, safeAddIceCandidate, flushIceCandidates]
+    [user, safeAddIceCandidate, flushIceCandidates]
   );
 
-  // Signaling for RECEIVER
   const setupReceiverSignaling = useCallback(
     (currentCallId: string, pc: RTCPeerConnection) => {
       if (!user) return;
@@ -251,6 +339,7 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
               new RTCSessionDescription(payload.sdp)
             );
             await flushIceCandidates();
+            console.log("[Call] Remote description set (offer), creating answer...");
             const answer = await peerConnection.current.createAnswer();
             await peerConnection.current.setLocalDescription(answer);
             console.log("[Call] Sending answer to caller");
@@ -264,32 +353,28 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
           }
         })
         .on("broadcast", { event: "ice-candidate" }, async ({ payload }) => {
+          console.log("[Call] Received remote ICE candidate");
           await safeAddIceCandidate(payload.candidate);
         })
         .on("broadcast", { event: "hangup" }, () => {
-          endCall();
+          endCallRef.current();
         })
         .subscribe((status) => {
           console.log("[Call] Receiver channel status:", status);
           if (status === "SUBSCRIBED") {
-            // Tell caller we're ready
-            console.log("[Call] Sending ready signal to caller");
-            // Small delay to ensure caller is listening
-            setTimeout(() => {
-              channel.send({
-                type: "broadcast",
-                event: "ready",
-                payload: { from: user.id },
-              });
-            }, 500);
-            // Send again after a longer delay as backup
-            setTimeout(() => {
-              channel.send({
-                type: "broadcast",
-                event: "ready",
-                payload: { from: user.id },
-              });
-            }, 2000);
+            console.log("[Call] Receiver subscribed, sending ready signals");
+            // Send ready signals with increasing delays for reliability
+            [500, 1500, 3000].forEach((delay) => {
+              setTimeout(() => {
+                if (channelRef.current) {
+                  channel.send({
+                    type: "broadcast",
+                    event: "ready",
+                    payload: { from: user.id },
+                  });
+                }
+              }, delay);
+            });
           }
         });
 
@@ -297,18 +382,20 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log("[Call] Sending ICE candidate:", event.candidate.type, event.candidate.protocol);
           channel.send({
             type: "broadcast",
             event: "ice-candidate",
             payload: { candidate: event.candidate.toJSON(), from: user.id },
           });
+        } else {
+          console.log("[Call] ICE gathering complete");
         }
       };
     },
-    [user, endCall, safeAddIceCandidate, flushIceCandidates]
+    [user, safeAddIceCandidate, flushIceCandidates]
   );
 
-  // Start outgoing call
   const startCall = useCallback(async () => {
     if (!user) return;
 
@@ -317,7 +404,10 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       const stream = await getMedia();
       const pc = createPeerConnection();
 
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      stream.getTracks().forEach((track) => {
+        console.log("[Call] Adding local track:", track.kind, track.enabled);
+        pc.addTrack(track, stream);
+      });
 
       const { data: session, error } = await supabase
         .from("call_sessions")
@@ -337,14 +427,16 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       }
 
       setCallId(session.id);
+      callIdRef.current = session.id;
 
-      // Create offer first
-      const offer = await pc.createOffer();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+      });
       await pc.setLocalDescription(offer);
       pendingOffer.current = offer;
-      console.log("[Call] Offer created, setting up signaling");
+      console.log("[Call] Offer created, setting up signaling for call:", session.id);
 
-      // Set up signaling — receiver will send "ready" when joined
       setupCallerSignaling(session.id, pc);
     } catch (err) {
       console.error("[Call] Failed to start call:", err);
@@ -353,21 +445,23 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     }
   }, [user, partnerId, getMedia, createPeerConnection, setupCallerSignaling, cleanup]);
 
-  // Answer incoming call
   const answerCall = useCallback(
     async (incomingCallId: string) => {
       if (!user) return;
 
       try {
         setCallId(incomingCallId);
+        callIdRef.current = incomingCallId;
         setCallStatus("calling");
 
         const stream = await getMedia();
         const pc = createPeerConnection();
 
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        stream.getTracks().forEach((track) => {
+          console.log("[Call] Adding local track:", track.kind, track.enabled);
+          pc.addTrack(track, stream);
+        });
 
-        // Set up receiver signaling — sends "ready" once subscribed
         setupReceiverSignaling(incomingCallId, pc);
 
         await supabase
@@ -385,7 +479,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     [user, getMedia, createPeerConnection, setupReceiverSignaling, cleanup]
   );
 
-  // Reject incoming call
   const rejectCall = useCallback(
     async (incomingCallId: string) => {
       await supabase
@@ -441,6 +534,7 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
           const call = payload.new as any;
           if (call.status === "ringing" && callStatus === "idle") {
             setCallId(call.id);
+            callIdRef.current = call.id;
             setCallStatus("ringing");
             onIncomingCall?.(call.id, call.caller_id);
           }
