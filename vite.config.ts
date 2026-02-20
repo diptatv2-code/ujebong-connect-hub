@@ -23,6 +23,7 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,woff2}"],
       },
       manifest: {
+        id: "/",
         name: "Ujebong by Pop Senek & Dipta",
         short_name: "Ujebong",
         description: "Connect with friends and the world",
@@ -31,8 +32,28 @@ export default defineConfig(({ mode }) => ({
         display: "standalone",
         orientation: "portrait",
         start_url: "/",
+        categories: ["social", "communication"],
         icons: [
-          { src: "/pwa-icon-512.png", sizes: "512x512", type: "image/jpeg", purpose: "any maskable" },
+          { src: "/pwa-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/pwa-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/pwa-icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+          { src: "/pwa-icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+        screenshots: [
+          {
+            src: "/pwa-icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            form_factor: "wide",
+            label: "Ujebong Home"
+          },
+          {
+            src: "/pwa-icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            form_factor: "narrow",
+            label: "Ujebong Mobile"
+          }
         ],
       },
     }),
