@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import PostCard from "@/components/PostCard";
 import type { PostWithProfile } from "@/pages/FeedsPage";
 import { toast } from "sonner";
+import { compressImage } from "@/lib/image-utils";
 
 const ProfilePage = () => {
   const { userId } = useParams();
@@ -194,9 +195,9 @@ const ProfilePage = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     setUploading(true);
-    const ext = file.name.split(".").pop();
-    const path = `${user.id}/avatar.${ext}`;
-    const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+    const compressed = await compressImage(file, { maxWidth: 400, quality: 0.7 });
+    const path = `${user.id}/avatar.jpg`;
+    const { error } = await supabase.storage.from("avatars").upload(path, compressed, { upsert: true, contentType: "image/jpeg" });
     if (error) { toast.error("Upload failed"); setUploading(false); return; }
     const { data } = supabase.storage.from("avatars").getPublicUrl(path);
     const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;

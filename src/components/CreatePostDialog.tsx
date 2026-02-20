@@ -3,6 +3,7 @@ import { X, Image, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { compressImage } from "@/lib/image-utils";
 
 interface CreatePostDialogProps {
   open: boolean;
@@ -38,9 +39,10 @@ const CreatePostDialog = ({ open, onClose, onPost, userName = "You" }: CreatePos
 
     let imageUrl: string | undefined;
     if (imageFile && user) {
-      const ext = imageFile.name.split(".").pop();
+      const compressed = await compressImage(imageFile, { maxWidth: 1080, quality: 0.75 });
+      const ext = "jpg";
       const path = `${user.id}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("posts").upload(path, imageFile);
+      const { error } = await supabase.storage.from("posts").upload(path, compressed, { contentType: "image/jpeg" });
       if (!error) {
         const { data } = supabase.storage.from("posts").getPublicUrl(path);
         imageUrl = data.publicUrl;

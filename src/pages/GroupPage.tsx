@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import AudioPlayer from "@/components/AudioPlayer";
 import VoiceRecorder from "@/components/VoiceRecorder";
+import { compressImage } from "@/lib/image-utils";
 
 const REACTIONS = [
   { type: "like", emoji: "👍", label: "Like" },
@@ -244,9 +245,9 @@ const GroupPage = () => {
 
     let imageUrl: string | undefined;
     if (newPostImage) {
-      const ext = newPostImage.name.split(".").pop();
-      const path = `${user.id}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("group-posts").upload(path, newPostImage);
+      const compressed = await compressImage(newPostImage, { maxWidth: 1080, quality: 0.75 });
+      const path = `${user.id}/${Date.now()}.jpg`;
+      const { error } = await supabase.storage.from("group-posts").upload(path, compressed, { contentType: "image/jpeg" });
       if (!error) {
         const { data } = supabase.storage.from("group-posts").getPublicUrl(path);
         imageUrl = data.publicUrl;

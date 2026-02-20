@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import SelfieCapture from "@/components/SelfieCapture";
+import { compressImage } from "@/lib/image-utils";
 
 const TURNSTILE_SITE_KEY = "0x4AAAAAACfzI-S-IHLfWXtI";
 const win = window as any;
@@ -118,12 +119,13 @@ const LoginPage = () => {
         if (error) throw error;
 
         if (selfieFile && userId) {
+          const compressed = await compressImage(selfieFile, { maxWidth: 400, quality: 0.7 });
           const selfiePath = `${userId}/selfie.jpg`;
           const avatarPath = `${userId}/avatar.jpg`;
-          const { error: uploadErr } = await supabase.storage.from("selfies").upload(selfiePath, selfieFile);
+          const { error: uploadErr } = await supabase.storage.from("selfies").upload(selfiePath, compressed, { contentType: "image/jpeg" });
           if (!uploadErr) {
             const { data } = supabase.storage.from("selfies").getPublicUrl(selfiePath);
-            await supabase.storage.from("avatars").upload(avatarPath, selfieFile, { upsert: true });
+            await supabase.storage.from("avatars").upload(avatarPath, compressed, { upsert: true, contentType: "image/jpeg" });
             const { data: avatarData } = supabase.storage.from("avatars").getPublicUrl(avatarPath);
             await supabase.from("profiles").update({
               selfie_url: data.publicUrl,
