@@ -4,6 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { formatDistanceToNow } from "date-fns";
+
+const ActiveStatus = ({ lastActiveAt }: { lastActiveAt: string | null }) => {
+  if (!lastActiveAt) return null;
+  const diff = Date.now() - new Date(lastActiveAt).getTime();
+  if (diff < 2 * 60 * 1000) {
+    return <span className="text-xs text-green-500 font-medium">🟢 Active now</span>;
+  }
+  return <span className="text-xs text-muted-foreground">Last seen {formatDistanceToNow(new Date(lastActiveAt), { addSuffix: true })}</span>;
+};
 
 const SearchPage = () => {
   const { user } = useAuth();
@@ -16,7 +26,7 @@ const SearchPage = () => {
   useEffect(() => {
     const fetchAll = async () => {
       const [{ data: p }, { data: g }] = await Promise.all([
-        supabase.from("profiles").select("id, name, avatar_url, bio").neq("id", user?.id ?? ""),
+        supabase.from("profiles").select("id, name, avatar_url, bio, last_active_at").neq("id", user?.id ?? ""),
         supabase.from("groups").select("*"),
       ]);
       setProfiles(p || []);
@@ -61,7 +71,7 @@ const SearchPage = () => {
                   <div key={u.id} className="flex items-center justify-between">
                     <div className="flex cursor-pointer items-center gap-3" onClick={() => navigate(`/profile/${u.id}`)}>
                       {u.avatar_url ? <img src={u.avatar_url} alt="" className="h-11 w-11 rounded-full bg-muted object-cover" /> : <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">{u.name?.[0]}</div>}
-                      <div><p className="text-sm font-semibold text-foreground">{u.name}</p><p className="text-xs text-muted-foreground">{u.bio || "New to Ujebong"}</p></div>
+                      <div><p className="text-sm font-semibold text-foreground">{u.name}</p><p className="text-xs text-muted-foreground">{u.bio || "New to Ujebong"}</p><ActiveStatus lastActiveAt={u.last_active_at} /></div>
                     </div>
                     <button onClick={() => sendRequest(u.id)} className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"><UserPlus size={12} /> Add</button>
                   </div>
