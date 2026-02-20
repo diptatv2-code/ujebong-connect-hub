@@ -271,8 +271,8 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
 
       {post.image_url && (
         <>
-          <div className="w-full overflow-hidden bg-muted cursor-pointer" onClick={() => setShowFullImage(true)}>
-            <img src={optimizeImageUrl(post.image_url, { width: 800, quality: 70 })} alt="Post" className="w-full object-contain" loading="lazy" />
+          <div className="w-full overflow-hidden bg-muted cursor-pointer max-h-[70vh] flex items-center justify-center" onClick={() => setShowFullImage(true)}>
+            <img src={optimizeImageUrl(post.image_url, { width: 800, quality: 70 })} alt="Post" className="w-full max-h-[70vh] object-contain" loading="lazy" />
           </div>
           <Dialog open={showFullImage} onOpenChange={setShowFullImage}>
             <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 border-none bg-transparent shadow-none overflow-hidden flex items-center justify-center">
