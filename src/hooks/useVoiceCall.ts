@@ -147,10 +147,20 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
   }, []);
 
   const createPeerConnection = useCallback(() => {
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     const pc = new RTCPeerConnection({
       iceServers: ICE_SERVERS,
-      iceCandidatePoolSize: 10,
-    });
+      iceCandidatePoolSize: isSafari ? 0 : 10,
+      // Safari needs explicit bundlePolicy
+      bundlePolicy: "max-bundle",
+      rtcpMuxPolicy: "require",
+    } as RTCConfiguration);
+
+    // Safari desktop needs a transceiver to properly negotiate audio
+    if (isSafari) {
+      console.log("[Call] Safari detected, adding audio transceiver");
+      pc.addTransceiver("audio", { direction: "sendrecv" });
+    }
 
     pc.ontrack = (event) => {
       console.log("[Call] Remote track received, kind:", event.track.kind, "readyState:", event.track.readyState);
@@ -404,10 +414,23 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       const stream = await getMedia();
       const pc = createPeerConnection();
 
-      stream.getTracks().forEach((track) => {
-        console.log("[Call] Adding local track:", track.kind, track.enabled);
-        pc.addTrack(track, stream);
-      });
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      if (isSafari) {
+        // Safari: replace the transceiver's track instead of addTrack
+        const senders = pc.getSenders();
+        const audioSender = senders.find(s => s.track === null || s.track?.kind === "audio");
+        if (audioSender) {
+          console.log("[Call] Safari: replacing transceiver track");
+          await audioSender.replaceTrack(stream.getAudioTracks()[0]);
+        } else {
+          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        }
+      } else {
+        stream.getTracks().forEach((track) => {
+          console.log("[Call] Adding local track:", track.kind, track.enabled);
+          pc.addTrack(track, stream);
+        });
+      }
 
       const { data: session, error } = await supabase
         .from("call_sessions")
@@ -429,10 +452,8 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       setCallId(session.id);
       callIdRef.current = session.id;
 
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: false,
-      });
+      const offer = await pc.createOffer();
+      console.log("[Call] Offer SDP type:", offer.type, "sdp length:", offer.sdp?.length);
       await pc.setLocalDescription(offer);
       pendingOffer.current = offer;
       console.log("[Call] Offer created, setting up signaling for call:", session.id);
@@ -457,10 +478,22 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
         const stream = await getMedia();
         const pc = createPeerConnection();
 
-        stream.getTracks().forEach((track) => {
-          console.log("[Call] Adding local track:", track.kind, track.enabled);
-          pc.addTrack(track, stream);
-        });
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        if (isSafari) {
+          const senders = pc.getSenders();
+          const audioSender = senders.find(s => s.track === null || s.track?.kind === "audio");
+          if (audioSender) {
+            console.log("[Call] Safari: replacing transceiver track");
+            await audioSender.replaceTrack(stream.getAudioTracks()[0]);
+          } else {
+            stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+          }
+        } else {
+          stream.getTracks().forEach((track) => {
+            console.log("[Call] Adding local track:", track.kind, track.enabled);
+            pc.addTrack(track, stream);
+          });
+        }
 
         setupReceiverSignaling(incomingCallId, pc);
 
