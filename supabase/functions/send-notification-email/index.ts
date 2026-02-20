@@ -13,6 +13,13 @@ Deno.serve(async (req) => {
   try {
     const { user_id, type, actor_id, content } = await req.json();
 
+    // Skip email notifications for likes
+    if (type === "like") {
+      return new Response(JSON.stringify({ skipped: true, reason: "likes don't trigger emails" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY not configured");
 
@@ -32,16 +39,36 @@ Deno.serve(async (req) => {
     const { data: actorProfile } = await supabase.from("profiles").select("name").eq("id", actor_id).single();
     const actorName = actorProfile?.name || "Someone";
 
+    const appUrl = "https://ujebong-connect-hub.lovable.app";
+
     const subjects: Record<string, string> = {
-      like: `${actorName} liked your post`,
       comment: `${actorName} commented on your post`,
       message: `${actorName} sent you a message`,
     };
 
+    const commentHtml = `
+      <p><strong>${actorName}</strong> commented on your post:</p>
+      <blockquote style="border-left: 3px solid #6c63ff; padding-left: 12px; color: #555; margin: 12px 0;">${content || ""}</blockquote>
+      <p style="margin-top: 16px;">
+        <a href="${appUrl}" style="display: inline-block; background: #6c63ff; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+          View Post
+        </a>
+      </p>
+    `;
+
+    const messageHtml = `
+      <p><strong>${actorName}</strong> sent you a message:</p>
+      <blockquote style="border-left: 3px solid #6c63ff; padding-left: 12px; color: #555; margin: 12px 0;">${content || "Voice/image message"}</blockquote>
+      <p style="margin-top: 16px;">
+        <a href="${appUrl}/messages" style="display: inline-block; background: #6c63ff; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+          Open Messages
+        </a>
+      </p>
+    `;
+
     const bodies: Record<string, string> = {
-      like: `<p><strong>${actorName}</strong> liked your post on Ujebong.</p>`,
-      comment: `<p><strong>${actorName}</strong> commented on your post:</p><blockquote style="border-left: 3px solid #6c63ff; padding-left: 12px; color: #555;">${content || ""}</blockquote>`,
-      message: `<p><strong>${actorName}</strong> sent you a message:</p><blockquote style="border-left: 3px solid #6c63ff; padding-left: 12px; color: #555;">${content || "Voice/image message"}</blockquote>`,
+      comment: commentHtml,
+      message: messageHtml,
     };
 
     const emailHtml = `
@@ -54,7 +81,6 @@ Deno.serve(async (req) => {
       </div>
     `;
 
-    // Use verified domain if available, fallback to resend test
     const fromEmail = Deno.env.get("FROM_EMAIL") || "Ujebong <onboarding@resend.dev>";
 
     const res = await fetch("https://api.resend.com/emails", {
