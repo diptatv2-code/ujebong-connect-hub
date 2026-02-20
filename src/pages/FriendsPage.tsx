@@ -5,12 +5,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { formatDistanceToNow } from "date-fns";
+
+const ActiveStatus = ({ lastActiveAt }: { lastActiveAt: string | null }) => {
+  if (!lastActiveAt) return null;
+  const diff = Date.now() - new Date(lastActiveAt).getTime();
+  if (diff < 2 * 60 * 1000) {
+    return <span className="text-xs text-green-500 font-medium">🟢 Active now</span>;
+  }
+  return <span className="text-xs text-muted-foreground">Last seen {formatDistanceToNow(new Date(lastActiveAt), { addSuffix: true })}</span>;
+};
 
 interface ProfileData {
   id: string;
   name: string;
   avatar_url: string;
   bio: string;
+  last_active_at: string | null;
 }
 
 interface FriendshipData {
@@ -31,7 +42,7 @@ const FriendsPage = () => {
   const fetchData = async () => {
     if (!user) return;
     const [{ data: profiles }, { data: ships }] = await Promise.all([
-      supabase.from("profiles").select("id, name, avatar_url, bio").neq("id", user.id),
+      supabase.from("profiles").select("id, name, avatar_url, bio, last_active_at").neq("id", user.id),
       supabase.from("friendships").select("id, requester_id, addressee_id, status"),
     ]);
     setAllProfiles(profiles || []);
@@ -44,6 +55,10 @@ const FriendsPage = () => {
   useEffect(() => {
     const ch = supabase.channel("friendships-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, () => fetchData())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
+        const updated = payload.new as any;
+        setAllProfiles(prev => prev.map(p => p.id === updated.id ? { ...p, last_active_at: updated.last_active_at } : p));
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user]);
@@ -131,7 +146,7 @@ const FriendsPage = () => {
                   <div key={p.id} className="flex items-center justify-between">
                     <div className="flex cursor-pointer items-center gap-3" onClick={() => navigate(`/profile/${p.id}`)}>
                       {p.avatar_url ? <img src={p.avatar_url} alt="" className="h-11 w-11 rounded-full bg-muted object-cover" /> : <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">{p.name[0]}</div>}
-                      <div><p className="text-sm font-semibold text-foreground">{p.name}</p><p className="text-xs text-muted-foreground">{p.bio || "New to Ujebong"}</p></div>
+                      <div><p className="text-sm font-semibold text-foreground">{p.name}</p><p className="text-xs text-muted-foreground">{p.bio || "New to Ujebong"}</p><ActiveStatus lastActiveAt={p.last_active_at} /></div>
                     </div>
                     {status === "none" && (
                       <button onClick={() => sendRequest(p.id)} className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
@@ -170,7 +185,7 @@ const FriendsPage = () => {
                 <motion.div key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between">
                   <div className="flex cursor-pointer items-center gap-3" onClick={() => navigate(`/profile/${p.id}`)}>
                     {p.avatar_url ? <img src={p.avatar_url} alt="" className="h-11 w-11 rounded-full bg-muted object-cover" /> : <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">{p.name[0]}</div>}
-                    <p className="text-sm font-semibold text-foreground">{p.name}</p>
+                    <div><p className="text-sm font-semibold text-foreground">{p.name}</p><ActiveStatus lastActiveAt={p.last_active_at} /></div>
                   </div>
                   <button onClick={() => removeFriend(getFriendship(p.id)!.id)} className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground">
                     <UserCheck size={14} /> Friends
