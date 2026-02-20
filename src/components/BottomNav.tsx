@@ -1,6 +1,7 @@
 import { Home, Users, MessageCircle, UsersRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 
 const tabs = [
   { path: "/", icon: Home, label: "Feeds" },
@@ -12,6 +13,7 @@ const tabs = [
 const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { unreadCount } = useUnreadMessages();
 
   if (["/login", "/signup", "/pending"].includes(location.pathname) || location.pathname.startsWith("/chat/")) return null;
 
@@ -20,6 +22,7 @@ const BottomNav = () => {
       <div className="mx-auto flex h-14 max-w-lg items-center justify-around">
         {tabs.map((tab) => {
           const isActive = location.pathname === tab.path;
+          const showBadge = tab.path === "/messages" && unreadCount > 0;
           return (
             <button
               key={tab.path}
@@ -33,7 +36,14 @@ const BottomNav = () => {
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )}
-              <tab.icon size={22} className={isActive ? "text-primary" : "text-muted-foreground"} />
+              <div className="relative">
+                <tab.icon size={22} className={isActive ? "text-primary" : "text-muted-foreground"} />
+                {showBadge && (
+                  <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </div>
               <span className={`text-[10px] font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}>{tab.label}</span>
             </button>
           );

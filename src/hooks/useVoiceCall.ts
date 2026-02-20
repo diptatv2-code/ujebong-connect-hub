@@ -178,20 +178,25 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       pc.addTransceiver("audio", { direction: "sendrecv" });
     }
 
+    // Use a single remote stream that accumulates all remote tracks
+    const remoteStream = new MediaStream();
+    
     pc.ontrack = (event) => {
       console.log("[Call] ontrack fired - kind:", event.track.kind, "readyState:", event.track.readyState, "streams:", event.streams.length);
-      const stream = event.streams?.[0] || new MediaStream([event.track]);
+      
+      // Add the track to our accumulated remote stream
+      remoteStream.addTrack(event.track);
 
       // Monitor the track for state changes
       event.track.onunmute = () => {
-        console.log("[Call] Remote track unmuted");
-        playRemoteAudio(stream);
+        console.log("[Call] Remote track unmuted, replaying audio");
+        playRemoteAudio(remoteStream);
       };
       event.track.onended = () => {
         console.log("[Call] Remote track ended");
       };
 
-      playRemoteAudio(stream);
+      playRemoteAudio(remoteStream);
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -206,8 +211,16 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
             }
           }, 1000);
         }
-        // Re-attempt audio playback when ICE connects (covers edge cases)
-        if (remoteAudio.current?.srcObject) {
+        // Re-build remote stream from all receivers when ICE connects
+        const receivers = pc.getReceivers();
+        const audioTracks = receivers
+          .filter(r => r.track && r.track.kind === "audio")
+          .map(r => r.track);
+        console.log("[Call] ICE connected, audio receivers:", audioTracks.length);
+        if (audioTracks.length > 0) {
+          const freshStream = new MediaStream(audioTracks);
+          playRemoteAudio(freshStream);
+        } else if (remoteAudio.current?.srcObject) {
           remoteAudio.current.play().catch(() => {});
         }
       }
@@ -311,15 +324,27 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
             );
             await flushIceCandidates();
             console.log("[Call] Remote description set (answer), ICE candidates flushed");
-            // Explicitly check for remote streams and play audio
-            // ontrack may have fired before remote desc was set, so re-trigger playback
-            const receivers = peerConnection.current.getReceivers();
-            const audioReceivers = receivers.filter(r => r.track && r.track.kind === "audio");
-            console.log("[Call] Audio receivers after answer:", audioReceivers.length);
-            if (audioReceivers.length > 0) {
-              const remoteStream = new MediaStream(audioReceivers.map(r => r.track));
-              playRemoteAudio(remoteStream);
-            }
+            
+            // After setting remote description, repeatedly check for audio receivers
+            // as tracks may arrive asynchronously
+            const checkAndPlayAudio = () => {
+              if (!peerConnection.current) return;
+              const receivers = peerConnection.current.getReceivers();
+              const audioTracks = receivers
+                .filter(r => r.track && r.track.kind === "audio" && r.track.readyState === "live")
+                .map(r => r.track);
+              console.log("[Call] Checking audio receivers:", audioTracks.length);
+              if (audioTracks.length > 0) {
+                const remoteStream = new MediaStream(audioTracks);
+                playRemoteAudio(remoteStream);
+              }
+            };
+            
+            checkAndPlayAudio();
+            // Retry a few times as tracks may not be immediately available
+            setTimeout(checkAndPlayAudio, 500);
+            setTimeout(checkAndPlayAudio, 1500);
+            setTimeout(checkAndPlayAudio, 3000);
           } catch (e) {
             console.error("[Call] Error setting remote description:", e);
           }
