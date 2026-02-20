@@ -270,8 +270,8 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
       <p className="px-4 pb-2 text-sm leading-relaxed text-foreground">{post.content}</p>
 
       {post.image_url && (
-        <div className="w-full overflow-hidden bg-muted">
-          <img src={post.image_url} alt="Post" className="w-full object-contain" loading="lazy" />
+      <div className="w-full overflow-hidden bg-muted">
+          <img src={optimizeImageUrl(post.image_url, { width: 800, quality: 70 })} alt="Post" className="w-full object-contain" loading="lazy" />
         </div>
       )}
 
