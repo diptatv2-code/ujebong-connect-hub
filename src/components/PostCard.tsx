@@ -10,6 +10,7 @@ import type { PostWithProfile } from "@/pages/FeedsPage";
 import { formatDistanceToNow } from "date-fns";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import AudioPlayer from "@/components/AudioPlayer";
+import { optimizeImageUrl } from "@/lib/image-utils";
 
 const REACTIONS = [
   { type: "like", emoji: "👍", label: "Like" },
@@ -268,7 +269,7 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
 
       {post.image_url && (
         <div className="aspect-[3/2] w-full overflow-hidden bg-muted">
-          <img src={post.image_url} alt="Post" className="h-full w-full object-cover" loading="lazy" />
+          <img src={optimizeImageUrl(post.image_url, { width: 800, quality: 70 })} alt="Post" className="h-full w-full object-cover" loading="lazy" />
         </div>
       )}
 

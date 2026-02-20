@@ -1,4 +1,30 @@
 /**
+ * Transform a Supabase storage public URL to request a resized/optimized version.
+ * Works with Supabase's built-in image transformation.
+ * Falls back to original URL if not a Supabase storage URL.
+ */
+export function optimizeImageUrl(
+  url: string | null | undefined,
+  options: { width?: number; quality?: number } = {}
+): string {
+  if (!url) return "";
+  const { width = 800, quality = 70 } = options;
+
+  // Only transform Supabase storage URLs
+  if (url.includes("/storage/v1/object/public/")) {
+    // Replace /object/public/ with /render/image/public/ and add params
+    const transformed = url.replace(
+      "/storage/v1/object/public/",
+      "/storage/v1/render/image/public/"
+    );
+    const separator = transformed.includes("?") ? "&" : "?";
+    return `${transformed}${separator}width=${width}&quality=${quality}`;
+  }
+
+  return url;
+}
+
+/**
  * Compress an image file client-side before uploading.
  * Returns a compressed File with reduced dimensions and quality.
  */
