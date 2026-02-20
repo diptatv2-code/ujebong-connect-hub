@@ -45,12 +45,12 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
   const callStartTime = useRef<number | null>(null);
   const pendingOffer = useRef<RTCSessionDescriptionInit | null>(null);
   const iceCandidateBuffer = useRef<RTCIceCandidateInit[]>([]);
+  const earlyLocalCandidates = useRef<RTCIceCandidateInit[]>([]);
   const hasRemoteDescription = useRef(false);
-  // Use refs for values needed inside createPeerConnection to avoid stale closures
+  const signalingReady = useRef(false);
   const callIdRef = useRef<string | null>(null);
   const endCallRef = useRef<() => void>(() => {});
 
-  // Keep callIdRef in sync
   useEffect(() => {
     callIdRef.current = callId;
   }, [callId]);
@@ -63,7 +63,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       (audio as any).playsInline = true;
       audio.setAttribute("playsinline", "true");
       audio.setAttribute("webkit-playsinline", "true");
-      // Append to DOM for mobile compatibility
       audio.style.display = "none";
       document.body.appendChild(audio);
       remoteAudio.current = audio;
@@ -100,7 +99,9 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     pendingOffer.current = null;
     callStartTime.current = null;
     iceCandidateBuffer.current = [];
+    earlyLocalCandidates.current = [];
     hasRemoteDescription.current = false;
+    signalingReady.current = false;
     setCallDuration(0);
   }, []);
 
@@ -138,34 +139,25 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     iceCandidateBuffer.current = [];
   }, []);
 
-  const createPeerConnection = useCallback((iceServers: RTCIceServer[]) => {
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    console.log("[Call] Creating peer connection with", iceServers.length, "ICE servers");
-    const pc = new RTCPeerConnection({
-      iceServers,
-      iceCandidatePoolSize: isSafari ? 0 : 10,
-      bundlePolicy: "max-bundle",
-      rtcpMuxPolicy: "require",
-    } as RTCConfiguration);
-
-    // Safari desktop needs a transceiver to properly negotiate audio
-    if (isSafari) {
-      console.log("[Call] Safari detected, adding audio transceiver");
-      pc.addTransceiver("audio", { direction: "sendrecv" });
-    }
-
-    pc.ontrack = (event) => {
-      console.log("[Call] Remote track received, kind:", event.track.kind, "readyState:", event.track.readyState);
-      if (remoteAudio.current) {
-        // Use streams if available, otherwise create a new MediaStream from the track
-        const stream = event.streams?.[0] || new MediaStream([event.track]);
-        remoteAudio.current.srcObject = stream;
-        // Force play with user gesture workaround
-        const playPromise = remoteAudio.current.play();
-        if (playPromise) {
-          playPromise.catch((e) => {
-            console.warn("[Call] Audio autoplay blocked, retrying:", e);
-            // Retry on next user interaction
+  const playRemoteAudio = useCallback((stream: MediaStream) => {
+    if (!remoteAudio.current) return;
+    console.log("[Call] Setting remote audio stream, tracks:", stream.getAudioTracks().length);
+    stream.getAudioTracks().forEach((track) => {
+      console.log("[Call] Remote audio track - enabled:", track.enabled, "readyState:", track.readyState, "muted:", track.muted);
+    });
+    remoteAudio.current.srcObject = stream;
+    remoteAudio.current.volume = 1.0;
+    
+    const attemptPlay = () => {
+      if (!remoteAudio.current) return;
+      const playPromise = remoteAudio.current.play();
+      if (playPromise) {
+        playPromise
+          .then(() => {
+            console.log("[Call] Remote audio playing successfully");
+          })
+          .catch((e) => {
+            console.warn("[Call] Audio autoplay blocked, will retry on interaction:", e);
             const resumeAudio = () => {
               remoteAudio.current?.play().catch(() => {});
               document.removeEventListener("touchstart", resumeAudio);
@@ -174,8 +166,44 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
             document.addEventListener("touchstart", resumeAudio, { once: true });
             document.addEventListener("click", resumeAudio, { once: true });
           });
-        }
       }
+    };
+
+    // Try playing immediately
+    attemptPlay();
+    // Also retry after a short delay in case the track isn't ready yet
+    setTimeout(attemptPlay, 500);
+  }, []);
+
+  const createPeerConnection = useCallback((iceServers: RTCIceServer[]) => {
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    console.log("[Call] Creating peer connection with", iceServers.length, "ICE servers, Safari:", isSafari);
+    const pc = new RTCPeerConnection({
+      iceServers,
+      iceCandidatePoolSize: isSafari ? 0 : 10,
+      bundlePolicy: "max-bundle",
+      rtcpMuxPolicy: "require",
+    } as RTCConfiguration);
+
+    if (isSafari) {
+      console.log("[Call] Safari detected, adding audio transceiver");
+      pc.addTransceiver("audio", { direction: "sendrecv" });
+    }
+
+    pc.ontrack = (event) => {
+      console.log("[Call] ontrack fired - kind:", event.track.kind, "readyState:", event.track.readyState, "streams:", event.streams.length);
+      const stream = event.streams?.[0] || new MediaStream([event.track]);
+
+      // Monitor the track for state changes
+      event.track.onunmute = () => {
+        console.log("[Call] Remote track unmuted");
+        playRemoteAudio(stream);
+      };
+      event.track.onended = () => {
+        console.log("[Call] Remote track ended");
+      };
+
+      playRemoteAudio(stream);
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -190,10 +218,13 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
             }
           }, 1000);
         }
+        // Re-attempt audio playback when ICE connects (covers edge cases)
+        if (remoteAudio.current?.srcObject) {
+          remoteAudio.current.play().catch(() => {});
+        }
       }
       if (pc.iceConnectionState === "disconnected") {
         console.warn("[Call] ICE disconnected, waiting for recovery...");
-        // Give ICE a chance to recover before ending
         setTimeout(() => {
           if (peerConnection.current?.iceConnectionState === "disconnected") {
             console.log("[Call] ICE still disconnected, ending call");
@@ -215,9 +246,12 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       console.log("[Call] ICE gathering state:", pc.iceGatheringState);
     };
 
+    // Buffer local ICE candidates until signaling channel is ready
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log("[Call] Local ICE candidate:", event.candidate.type, event.candidate.protocol);
+        const candidateJson = event.candidate.toJSON();
+        console.log("[Call] Local ICE candidate (pre-signaling):", event.candidate.type, event.candidate.protocol);
+        earlyLocalCandidates.current.push(candidateJson);
       } else {
         console.log("[Call] ICE gathering complete");
       }
@@ -225,11 +259,11 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
 
     peerConnection.current = pc;
     return pc;
-  }, []);
+  }, [playRemoteAudio]);
 
   const endCall = useCallback(async () => {
     const currentCallId = callIdRef.current;
-    
+
     if (channelRef.current) {
       channelRef.current.send({
         type: "broadcast",
@@ -257,7 +291,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     setCallId(null);
   }, [user, cleanup]);
 
-  // Keep endCallRef in sync
   useEffect(() => {
     endCallRef.current = endCall;
   }, [endCall]);
@@ -303,23 +336,33 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
         })
         .subscribe((status) => {
           console.log("[Call] Caller channel status:", status);
+          if (status === "SUBSCRIBED") {
+            signalingReady.current = true;
+            // Now override onicecandidate to send directly via channel
+            pc.onicecandidate = (event) => {
+              if (event.candidate) {
+                console.log("[Call] Sending ICE candidate:", event.candidate.type, event.candidate.protocol);
+                channel.send({
+                  type: "broadcast",
+                  event: "ice-candidate",
+                  payload: { candidate: event.candidate.toJSON(), from: user.id },
+                });
+              }
+            };
+            // Flush any early candidates that were buffered before signaling was ready
+            console.log("[Call] Flushing", earlyLocalCandidates.current.length, "early local ICE candidates");
+            for (const candidate of earlyLocalCandidates.current) {
+              channel.send({
+                type: "broadcast",
+                event: "ice-candidate",
+                payload: { candidate, from: user.id },
+              });
+            }
+            earlyLocalCandidates.current = [];
+          }
         });
 
       channelRef.current = channel;
-
-      // Override onicecandidate to send via signaling channel
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          console.log("[Call] Sending ICE candidate:", event.candidate.type, event.candidate.protocol);
-          channel.send({
-            type: "broadcast",
-            event: "ice-candidate",
-            payload: { candidate: event.candidate.toJSON(), from: user.id },
-          });
-        } else {
-          console.log("[Call] ICE gathering complete");
-        }
-      };
     },
     [user, safeAddIceCandidate, flushIceCandidates]
   );
@@ -364,7 +407,29 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
         .subscribe((status) => {
           console.log("[Call] Receiver channel status:", status);
           if (status === "SUBSCRIBED") {
-            console.log("[Call] Receiver subscribed, sending ready signals");
+            signalingReady.current = true;
+            // Override onicecandidate to send via channel
+            pc.onicecandidate = (event) => {
+              if (event.candidate) {
+                console.log("[Call] Sending ICE candidate:", event.candidate.type, event.candidate.protocol);
+                channel.send({
+                  type: "broadcast",
+                  event: "ice-candidate",
+                  payload: { candidate: event.candidate.toJSON(), from: user.id },
+                });
+              }
+            };
+            // Flush early local candidates
+            console.log("[Call] Flushing", earlyLocalCandidates.current.length, "early local ICE candidates");
+            for (const candidate of earlyLocalCandidates.current) {
+              channel.send({
+                type: "broadcast",
+                event: "ice-candidate",
+                payload: { candidate, from: user.id },
+              });
+            }
+            earlyLocalCandidates.current = [];
+
             // Send ready signals with increasing delays for reliability
             [500, 1500, 3000].forEach((delay) => {
               setTimeout(() => {
@@ -381,19 +446,6 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
         });
 
       channelRef.current = channel;
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          console.log("[Call] Sending ICE candidate:", event.candidate.type, event.candidate.protocol);
-          channel.send({
-            type: "broadcast",
-            event: "ice-candidate",
-            payload: { candidate: event.candidate.toJSON(), from: user.id },
-          });
-        } else {
-          console.log("[Call] ICE gathering complete");
-        }
-      };
     },
     [user, safeAddIceCandidate, flushIceCandidates]
   );
@@ -406,9 +458,9 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       const [stream, iceServers] = await Promise.all([getMedia(), fetchTurnCredentials()]);
       const pc = createPeerConnection(iceServers);
 
+      // Add local audio tracks to the peer connection
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
       if (isSafari) {
-        // Safari: replace the transceiver's track instead of addTrack
         const senders = pc.getSenders();
         const audioSender = senders.find(s => s.track === null || s.track?.kind === "audio");
         if (audioSender) {
@@ -419,10 +471,14 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
         }
       } else {
         stream.getTracks().forEach((track) => {
-          console.log("[Call] Adding local track:", track.kind, track.enabled);
+          console.log("[Call] Adding local track:", track.kind, "enabled:", track.enabled, "readyState:", track.readyState);
           pc.addTrack(track, stream);
         });
       }
+
+      // Verify audio tracks are attached
+      const senders = pc.getSenders();
+      console.log("[Call] PC senders after addTrack:", senders.length, senders.map(s => `${s.track?.kind}:${s.track?.enabled}:${s.track?.readyState}`));
 
       const { data: session, error } = await supabase
         .from("call_sessions")
@@ -444,13 +500,24 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
       setCallId(session.id);
       callIdRef.current = session.id;
 
-      const offer = await pc.createOffer();
+      // Set up signaling BEFORE creating the offer to avoid losing early ICE candidates
+      setupCallerSignaling(session.id, pc);
+
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+      });
       console.log("[Call] Offer SDP type:", offer.type, "sdp length:", offer.sdp?.length);
+      
+      // Verify the offer SDP contains audio
+      if (offer.sdp) {
+        const hasAudio = offer.sdp.includes("m=audio");
+        console.log("[Call] Offer SDP has audio m-line:", hasAudio);
+      }
+
       await pc.setLocalDescription(offer);
       pendingOffer.current = offer;
-      console.log("[Call] Offer created, setting up signaling for call:", session.id);
-
-      setupCallerSignaling(session.id, pc);
+      console.log("[Call] Offer created and local description set for call:", session.id);
     } catch (err) {
       console.error("[Call] Failed to start call:", err);
       cleanup();
@@ -482,11 +549,16 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
           }
         } else {
           stream.getTracks().forEach((track) => {
-            console.log("[Call] Adding local track:", track.kind, track.enabled);
+            console.log("[Call] Adding local track:", track.kind, "enabled:", track.enabled, "readyState:", track.readyState);
             pc.addTrack(track, stream);
           });
         }
 
+        // Verify audio tracks are attached
+        const senders = pc.getSenders();
+        console.log("[Call] PC senders after addTrack:", senders.length, senders.map(s => `${s.track?.kind}:${s.track?.enabled}:${s.track?.readyState}`));
+
+        // Set up signaling BEFORE any SDP exchange to avoid losing ICE candidates
         setupReceiverSignaling(incomingCallId, pc);
 
         await supabase
