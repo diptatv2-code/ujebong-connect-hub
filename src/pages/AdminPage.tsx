@@ -27,6 +27,9 @@ interface Report {
   created_at: string;
   reporter_name?: string;
   reported_name?: string;
+  post_content?: string;
+  post_image_url?: string | null;
+  comment_content?: string;
 }
 
 const AdminPage = () => {
@@ -55,11 +58,33 @@ const AdminPage = () => {
       const userIds = [...new Set([...data.map(r => r.reporter_id), ...data.map(r => r.reported_user_id).filter(Boolean)])];
       const { data: profs } = await supabase.from("profiles").select("id, name").in("id", userIds as string[]);
       const nameMap = new Map((profs || []).map(p => [p.id, p.name]));
-      setReports(data.map(r => ({
-        ...r,
-        reporter_name: nameMap.get(r.reporter_id) || "Unknown",
-        reported_name: r.reported_user_id ? nameMap.get(r.reported_user_id) || "Unknown" : "N/A",
-      })));
+
+      // Fetch reported posts content
+      const postIds = data.map(r => r.post_id).filter(Boolean) as string[];
+      const { data: postsData } = postIds.length > 0
+        ? await supabase.from("posts").select("id, content, image_url").in("id", postIds)
+        : { data: [] };
+      const postMap = new Map((postsData || []).map(p => [p.id, p]));
+
+      // Fetch reported comments content
+      const commentIds = data.map(r => r.comment_id).filter(Boolean) as string[];
+      const { data: commentsData } = commentIds.length > 0
+        ? await supabase.from("post_comments").select("id, content").in("id", commentIds)
+        : { data: [] };
+      const commentMap = new Map((commentsData || []).map(c => [c.id, c]));
+
+      setReports(data.map(r => {
+        const post = r.post_id ? postMap.get(r.post_id) : null;
+        const comment = r.comment_id ? commentMap.get(r.comment_id) : null;
+        return {
+          ...r,
+          reporter_name: nameMap.get(r.reporter_id) || "Unknown",
+          reported_name: r.reported_user_id ? nameMap.get(r.reported_user_id) || "Unknown" : "N/A",
+          post_content: post?.content,
+          post_image_url: post?.image_url,
+          comment_content: comment?.content,
+        };
+      }));
     }
   };
 
@@ -221,7 +246,20 @@ const AdminPage = () => {
                       }`}>{r.status}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">Against: {r.reported_name}</p>
-                    <p className="text-xs text-foreground">{r.reason}</p>
+                    <p className="text-xs font-medium text-foreground">Reason: {r.reason}</p>
+                    {r.post_content && (
+                      <div className="rounded bg-muted p-2 mt-1">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">Reported post:</p>
+                        <p className="text-xs text-foreground line-clamp-3">{r.post_content}</p>
+                        {r.post_image_url && <img src={r.post_image_url} alt="" className="mt-1 h-20 w-auto rounded object-cover" />}
+                      </div>
+                    )}
+                    {r.comment_content && (
+                      <div className="rounded bg-muted p-2 mt-1">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">Reported comment:</p>
+                        <p className="text-xs text-foreground line-clamp-3">{r.comment_content}</p>
+                      </div>
+                    )}
                     {r.status === "pending" && (
                       <div className="flex gap-2 pt-1">
                         {r.post_id && (

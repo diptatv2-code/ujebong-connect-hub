@@ -275,7 +275,7 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
       {(post.like_count > 0 || post.comment_count > 0) && (
         <div className="flex items-center justify-between px-4 py-2 text-xs text-muted-foreground">
           <span>{reactionSummary} {post.like_count}</span>
-          <span>{post.comment_count} comments</span>
+          <button onClick={() => setShowComments(!showComments)} className="hover:underline">{post.comment_count} comments</button>
         </div>
       )}
 
@@ -309,7 +309,15 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
         <button onClick={() => setShowComments(!showComments)} className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium text-muted-foreground">
           <MessageCircle size={18} /> Comment
         </button>
-        <button className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium text-muted-foreground">
+        <button onClick={() => {
+          const url = `${window.location.origin}/feeds`;
+          if (navigator.share) {
+            navigator.share({ title: post.profiles?.name || "Post", text: post.content?.slice(0, 100), url }).catch(() => {});
+          } else {
+            navigator.clipboard.writeText(url);
+            toast({ title: "Link copied to clipboard!" });
+          }
+        }} className="flex flex-1 items-center justify-center gap-2 py-2.5 text-sm font-medium text-muted-foreground">
           <Share2 size={18} /> Share
         </button>
       </div>
