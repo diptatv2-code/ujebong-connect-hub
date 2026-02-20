@@ -206,7 +206,7 @@ const ChatPage = () => {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-var(--header-height))] flex-col">
+    <div className="flex h-dvh flex-col">
       {/* Call Overlays */}
       <AnimatePresence>
         {callStatus === "ringing" && partner && (
