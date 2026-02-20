@@ -9,33 +9,25 @@ interface UseVoiceCallOptions {
   onIncomingCall?: (callId: string, callerId: string) => void;
 }
 
-const ICE_SERVERS: RTCIceServer[] = [
+const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
-  { urls: "stun:stun3.l.google.com:19302" },
-  { urls: "stun:stun4.l.google.com:19302" },
-  {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:relay1.expressturn.com:443",
-    username: "ef4JXHQEUG3AUBHYAV",
-    credential: "H5F9wy3XpG2cMXNz",
-  },
 ];
+
+async function fetchTurnCredentials(): Promise<RTCIceServer[]> {
+  try {
+    const { data, error } = await supabase.functions.invoke("get-turn-credentials");
+    if (error) {
+      console.error("[Call] Failed to fetch TURN credentials:", error);
+      return FALLBACK_ICE_SERVERS;
+    }
+    console.log("[Call] Got ICE servers from Metered, fallback:", data.fallback ?? false);
+    return data.iceServers;
+  } catch (e) {
+    console.error("[Call] Error fetching TURN credentials:", e);
+    return FALLBACK_ICE_SERVERS;
+  }
+}
 
 export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions) {
   const { user } = useAuth();
@@ -146,12 +138,12 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
     iceCandidateBuffer.current = [];
   }, []);
 
-  const createPeerConnection = useCallback(() => {
+  const createPeerConnection = useCallback((iceServers: RTCIceServer[]) => {
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    console.log("[Call] Creating peer connection with", iceServers.length, "ICE servers");
     const pc = new RTCPeerConnection({
-      iceServers: ICE_SERVERS,
+      iceServers,
       iceCandidatePoolSize: isSafari ? 0 : 10,
-      // Safari needs explicit bundlePolicy
       bundlePolicy: "max-bundle",
       rtcpMuxPolicy: "require",
     } as RTCConfiguration);
@@ -411,8 +403,8 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
 
     try {
       setCallStatus("calling");
-      const stream = await getMedia();
-      const pc = createPeerConnection();
+      const [stream, iceServers] = await Promise.all([getMedia(), fetchTurnCredentials()]);
+      const pc = createPeerConnection(iceServers);
 
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
       if (isSafari) {
@@ -475,8 +467,8 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
         callIdRef.current = incomingCallId;
         setCallStatus("calling");
 
-        const stream = await getMedia();
-        const pc = createPeerConnection();
+        const [stream, iceServers] = await Promise.all([getMedia(), fetchTurnCredentials()]);
+        const pc = createPeerConnection(iceServers);
 
         const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
         if (isSafari) {
