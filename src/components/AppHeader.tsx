@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Bell, MessageCircle, Shield } from "lucide-react";
+import { Bell, Search, Shield } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useApproval } from "@/hooks/useApproval";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -27,8 +27,8 @@ const AppHeader = () => {
               <Shield size={18} className="text-primary" />
             </button>
           )}
-          <button onClick={() => navigate("/messages")} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
-            <MessageCircle size={18} className="text-foreground" />
+          <button onClick={() => navigate("/search")} className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
+            <Search size={18} className="text-foreground" />
           </button>
           <button onClick={() => navigate("/notifications")} className="relative flex h-9 w-9 items-center justify-center rounded-full bg-secondary">
             <Bell size={18} className="text-foreground" />

@@ -12,6 +12,7 @@ import FriendsPage from "./pages/FriendsPage";
 import SearchPage from "./pages/SearchPage";
 import ProfilePage from "./pages/ProfilePage";
 import GroupPage from "./pages/GroupPage";
+import GroupsListPage from "./pages/GroupsListPage";
 import LoginPage from "./pages/LoginPage";
 import PendingApprovalPage from "./pages/PendingApprovalPage";
 import AdminPage from "./pages/AdminPage";
@@ -65,6 +66,7 @@ const AppRoutes = () => {
         <Route path="/friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
         <Route path="/profile/:userId" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+        <Route path="/groups" element={<ProtectedRoute><GroupsListPage /></ProtectedRoute>} />
         <Route path="/group/:groupId" element={<ProtectedRoute><GroupPage /></ProtectedRoute>} />
         <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
         <Route path="/chat/:userId" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />

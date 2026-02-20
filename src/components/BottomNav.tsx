@@ -1,12 +1,12 @@
-import { Home, Users, Search, MessageCircle } from "lucide-react";
+import { Home, Users, MessageCircle, UsersRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
 const tabs = [
   { path: "/", icon: Home, label: "Feeds" },
   { path: "/friends", icon: Users, label: "All Users" },
+  { path: "/groups", icon: UsersRound, label: "Groups" },
   { path: "/messages", icon: MessageCircle, label: "Messages" },
-  { path: "/search", icon: Search, label: "Search" },
 ];
 
 const BottomNav = () => {
