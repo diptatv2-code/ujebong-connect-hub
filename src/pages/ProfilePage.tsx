@@ -7,6 +7,7 @@ import PostCard from "@/components/PostCard";
 import type { PostWithProfile } from "@/pages/FeedsPage";
 import { toast } from "sonner";
 import { compressImage } from "@/lib/image-utils";
+import { formatDistanceToNow } from "date-fns";
 
 const ProfilePage = () => {
   const { userId } = useParams();
@@ -272,6 +273,15 @@ const ProfilePage = () => {
             <p className="mt-1 text-sm text-muted-foreground">{profile?.bio || "No bio yet"}</p>
             {isOwnProfile && <p className="mt-1 text-xs text-muted-foreground">✉️ {user?.email}</p>}
             <p className="mt-1 text-xs text-muted-foreground">{friendCount} friends</p>
+            {profile?.last_active_at && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {(() => {
+                  const diff = Date.now() - new Date(profile.last_active_at).getTime();
+                  if (diff < 2 * 60 * 1000) return "🟢 Active now";
+                  return `Last seen ${formatDistanceToNow(new Date(profile.last_active_at), { addSuffix: true })}`;
+                })()}
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               {isOwnProfile ? (
                 <button onClick={() => setEditing(true)} className="flex-1 rounded-lg bg-secondary py-2 text-sm font-medium text-foreground">Edit Profile</button>

@@ -21,6 +21,7 @@ import ChatPage from "./pages/ChatPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import InstallPage from "./pages/InstallPage";
 import NotFound from "./pages/NotFound";
+import { useLastActive } from "@/hooks/useLastActive";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,7 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppRoutes = () => {
   const { user, loading } = useAuth();
+  useLastActive();
 
   if (loading) return <Spinner />;
 

@@ -469,6 +469,7 @@ export type Database = {
           id: string
           is_approved: boolean
           is_verified: boolean
+          last_active_at: string | null
           name: string
           selfie_url: string | null
           updated_at: string
@@ -484,6 +485,7 @@ export type Database = {
           id: string
           is_approved?: boolean
           is_verified?: boolean
+          last_active_at?: string | null
           name?: string
           selfie_url?: string | null
           updated_at?: string
@@ -499,6 +501,7 @@ export type Database = {
           id?: string
           is_approved?: boolean
           is_verified?: boolean
+          last_active_at?: string | null
           name?: string
           selfie_url?: string | null
           updated_at?: string
