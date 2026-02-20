@@ -7,7 +7,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null; userId?: string }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null; emailVerified?: boolean }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null; emailVerified?: boolean; userId?: string }>;
   signOut: () => Promise<void>;
   resendVerification: (userId: string) => Promise<{ error: Error | null }>;
 }
@@ -62,20 +62,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error as Error | null };
 
+    const userId = data.user.id;
+
     // Check if email is verified in profiles
     const { data: profile } = await supabase
       .from("profiles")
       .select("email_verified")
-      .eq("id", data.user.id)
+      .eq("id", userId)
       .single();
 
     if (!profile?.email_verified) {
-      // Sign out unverified user
       await supabase.auth.signOut();
-      return { error: null, emailVerified: false };
+      return { error: null, emailVerified: false, userId };
     }
 
-    return { error: null, emailVerified: true };
+    return { error: null, emailVerified: true, userId };
   };
 
   const signOut = async () => {

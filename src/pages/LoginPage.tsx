@@ -134,19 +134,14 @@ const LoginPage = () => {
 
         setShowVerifyMessage(true);
       } else {
-        const { error, emailVerified } = await signIn(email, password);
+        const { error, emailVerified, userId } = await signIn(email, password);
         if (error) {
           throw error;
         }
         if (emailVerified === false) {
-          // Get user id for resend functionality
-          const { data: signInData } = await supabase.auth.signInWithPassword({ email, password });
-          const uid = signInData?.user?.id;
-          if (uid) {
-            await supabase.auth.signOut();
-            setUnverifiedUserId(uid);
-          }
+          if (userId) setUnverifiedUserId(userId);
           setShowVerifyMessage(true);
+          toast.error("Please verify your email first. Check your inbox for a link from noreply@ujebong.com");
           return;
         }
         toast.success("Welcome back!");
