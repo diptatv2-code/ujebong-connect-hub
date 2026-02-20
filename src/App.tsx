@@ -60,7 +60,7 @@ const AppRoutes = () => {
     <div className="mx-auto max-w-lg">
       <AppHeader />
       <Routes>
-        <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route path="/pending" element={user ? <PendingApprovalPage /> : <Navigate to="/login" replace />} />
         <Route path="/" element={<ProtectedRoute><FeedsPage /></ProtectedRoute>} />
         <Route path="/friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />

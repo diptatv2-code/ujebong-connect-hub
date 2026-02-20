@@ -51,9 +51,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       supabase.functions.invoke("notify-admin", {
         body: { user_name: name },
       }).catch(console.error);
-
-      // Sign out immediately - user must verify email first
-      await supabase.auth.signOut();
     }
     return { error: error as Error | null, userId: data.user?.id };
   };
