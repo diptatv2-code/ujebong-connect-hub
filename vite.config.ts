@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => ({
         orientation: "portrait",
         start_url: "/",
         icons: [
-          { src: "/pwa-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+          { src: "/pwa-icon-512.png", sizes: "512x512", type: "image/jpeg", purpose: "any maskable" },
         ],
       },
     }),
