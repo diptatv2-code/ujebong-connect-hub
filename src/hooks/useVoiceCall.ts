@@ -311,6 +311,15 @@ export function useVoiceCall({ partnerId, onIncomingCall }: UseVoiceCallOptions)
             );
             await flushIceCandidates();
             console.log("[Call] Remote description set (answer), ICE candidates flushed");
+            // Explicitly check for remote streams and play audio
+            // ontrack may have fired before remote desc was set, so re-trigger playback
+            const receivers = peerConnection.current.getReceivers();
+            const audioReceivers = receivers.filter(r => r.track && r.track.kind === "audio");
+            console.log("[Call] Audio receivers after answer:", audioReceivers.length);
+            if (audioReceivers.length > 0) {
+              const remoteStream = new MediaStream(audioReceivers.map(r => r.track));
+              playRemoteAudio(remoteStream);
+            }
           } catch (e) {
             console.error("[Call] Error setting remote description:", e);
           }
