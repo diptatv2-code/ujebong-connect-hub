@@ -17,9 +17,11 @@ serve(async (req) => {
       throw new Error("METERED_API_KEY not configured");
     }
 
-    const response = await fetch(
-      `https://ujebong.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
-    );
+    console.log("Using API key starting with:", apiKey.substring(0, 6) + "...", "length:", apiKey.length);
+
+    const url = `https://ujebong.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`;
+    console.log("Fetching:", url.replace(apiKey, "***"));
+    const response = await fetch(url);
     
     if (!response.ok) {
       const errorText = await response.text();
