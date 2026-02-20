@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import AudioPlayer from "@/components/AudioPlayer";
 import VoiceRecorder from "@/components/VoiceRecorder";
-import { compressImage } from "@/lib/image-utils";
+import { compressImage, optimizeImageUrl } from "@/lib/image-utils";
 
 const REACTIONS = [
   { type: "like", emoji: "👍", label: "Like" },
@@ -656,7 +656,7 @@ const GroupPostCard = ({ post, currentUserId, isGroupAdmin, onReaction, onCommen
 
       {post.image_url && (
         <div className="aspect-[3/2] w-full overflow-hidden bg-muted">
-          <img src={post.image_url} alt="Post" className="h-full w-full object-cover" loading="lazy" />
+          <img src={optimizeImageUrl(post.image_url, { width: 800, quality: 70 })} alt="Post" className="h-full w-full object-cover" loading="lazy" />
         </div>
       )}
 
