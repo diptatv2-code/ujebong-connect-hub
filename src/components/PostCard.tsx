@@ -37,6 +37,64 @@ interface CommentWithProfile {
   profiles: { name: string; avatar_url: string } | null;
 }
 
+const CommentItem = ({ comment, currentUserId, isAdmin, onDelete, onReport }: {
+  comment: CommentWithProfile;
+  currentUserId?: string;
+  isAdmin: boolean;
+  onDelete: (id: string, userId: string) => void;
+  onReport: (id: string, userId: string) => void;
+}) => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const isOwner = comment.user_id === currentUserId;
+  const canDelete = isOwner || isAdmin;
+  const canReport = !isOwner;
+
+  return (
+    <div className="flex gap-2">
+      {comment.profiles?.avatar_url ? (
+        <img src={comment.profiles.avatar_url} alt="" className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-full bg-muted" />
+      ) : (
+        <div className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
+          {comment.profiles?.name?.[0]?.toUpperCase() || "U"}
+        </div>
+      )}
+      <div className="flex-1">
+        <div className="flex items-start gap-1">
+          <div className="flex-1 rounded-2xl bg-secondary px-3 py-2">
+            <p className="text-xs font-semibold text-foreground">{comment.profiles?.name || "User"}</p>
+            {comment.audio_url && <AudioPlayer path={comment.audio_url} />}
+            {comment.content && <p className="text-xs text-foreground">{comment.content}</p>}
+          </div>
+          {(canDelete || canReport) && (
+            <div className="relative">
+              <button onClick={() => setMenuOpen(!menuOpen)} className="mt-1 text-muted-foreground p-1">
+                <MoreHorizontal size={14} />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-7 z-50 w-36 rounded-lg border border-border bg-card shadow-lg py-1">
+                  {canDelete && (
+                    <button onClick={() => { onDelete(comment.id, comment.user_id); setMenuOpen(false); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-destructive hover:bg-muted">
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  )}
+                  {canReport && (
+                    <button onClick={() => { onReport(comment.id, comment.user_id); setMenuOpen(false); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
+                      <Flag size={12} /> Report
+                    </button>
+                  )}
+                  <button onClick={() => setMenuOpen(false)} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-muted">Cancel</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: PostCardProps) => {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -261,30 +319,14 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-t border-border">
             <div className="space-y-3 px-4 py-3">
               {comments.map((comment) => (
-                <div key={comment.id} className="flex gap-2 group">
-                  {comment.profiles?.avatar_url ? (
-                    <img src={comment.profiles.avatar_url} alt="" className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-full bg-muted" />
-                  ) : (
-                    <div className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
-                      {comment.profiles?.name?.[0]?.toUpperCase() || "U"}
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <div className="rounded-2xl bg-secondary px-3 py-2">
-                      <p className="text-xs font-semibold text-foreground">{comment.profiles?.name || "User"}</p>
-                      {comment.audio_url && <AudioPlayer path={comment.audio_url} />}
-                      {comment.content && <p className="text-xs text-foreground">{comment.content}</p>}
-                    </div>
-                    <div className="flex gap-3 mt-0.5 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {(comment.user_id === currentUserId || isAdmin) && (
-                        <button onClick={() => handleDeleteComment(comment.id, comment.user_id)} className="text-[10px] text-destructive">Delete</button>
-                      )}
-                      {comment.user_id !== currentUserId && (
-                        <button onClick={() => handleReportComment(comment.id, comment.user_id)} className="text-[10px] text-muted-foreground">Report</button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <CommentItem
+                  key={comment.id}
+                  comment={comment}
+                  currentUserId={currentUserId}
+                  isAdmin={isAdmin}
+                  onDelete={handleDeleteComment}
+                  onReport={handleReportComment}
+                />
               ))}
               {comments.length === 0 && <p className="text-center text-xs text-muted-foreground">No comments yet</p>}
             </div>
