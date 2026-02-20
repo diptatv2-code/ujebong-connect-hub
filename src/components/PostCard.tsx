@@ -11,6 +11,7 @@ import { formatDistanceToNow } from "date-fns";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import AudioPlayer from "@/components/AudioPlayer";
 import { optimizeImageUrl } from "@/lib/image-utils";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const REACTIONS = [
   { type: "like", emoji: "👍", label: "Like" },
@@ -104,6 +105,7 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
   const [showMenu, setShowMenu] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [showReportDialog, setShowReportDialog] = useState(false);
+  const [showFullImage, setShowFullImage] = useState(false);
   const reactionTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -268,9 +270,16 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
       <p className="px-4 pb-2 text-sm leading-relaxed text-foreground">{post.content}</p>
 
       {post.image_url && (
-        <div className="aspect-[3/2] w-full overflow-hidden bg-muted">
-          <img src={optimizeImageUrl(post.image_url, { width: 800, quality: 70 })} alt="Post" className="h-full w-full object-cover" loading="lazy" />
-        </div>
+        <>
+          <div className="aspect-[3/2] w-full overflow-hidden bg-muted cursor-pointer" onClick={() => setShowFullImage(true)}>
+            <img src={optimizeImageUrl(post.image_url, { width: 800, quality: 70 })} alt="Post" className="h-full w-full object-cover" loading="lazy" />
+          </div>
+          <Dialog open={showFullImage} onOpenChange={setShowFullImage}>
+            <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 border-none bg-transparent shadow-none overflow-hidden flex items-center justify-center">
+              <img src={post.image_url} alt="Post full view" className="max-w-full max-h-[90vh] object-contain rounded-lg" />
+            </DialogContent>
+          </Dialog>
+        </>
       )}
 
       {(post.like_count > 0 || post.comment_count > 0) && (
