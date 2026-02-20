@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -6,6 +6,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import SelfieCapture from "@/components/SelfieCapture";
+
+const TURNSTILE_SITE_KEY = "0x4AAAAAACfzI-S-IHLfWXtI";
+const win = window as any;
 
 const LoginPage = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -18,8 +21,57 @@ const LoginPage = () => {
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
   const [honeypot, setHoneypot] = useState("");
   const [showVerifyMessage, setShowVerifyMessage] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetId = useRef<string | null>(null);
   const navigate = useNavigate();
   const { signUp, signIn } = useAuth();
+
+  // Load Turnstile script
+  useEffect(() => {
+    if (document.getElementById("cf-turnstile-script")) return;
+    const script = document.createElement("script");
+    script.id = "cf-turnstile-script";
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onTurnstileLoad";
+    script.async = true;
+    document.head.appendChild(script);
+  }, []);
+
+  const renderTurnstile = useCallback(() => {
+    if (!turnstileRef.current || !win.turnstile) return;
+    if (turnstileWidgetId.current) {
+      try { win.turnstile.remove(turnstileWidgetId.current); } catch {}
+      turnstileWidgetId.current = null;
+    }
+    setTurnstileToken(null);
+    turnstileWidgetId.current = win.turnstile.render(turnstileRef.current, {
+      sitekey: TURNSTILE_SITE_KEY,
+      callback: (token: string) => setTurnstileToken(token),
+      "expired-callback": () => setTurnstileToken(null),
+      theme: "auto",
+    });
+  }, []);
+
+  // Render widget when switching to signup
+  useEffect(() => {
+    if (isSignUp) {
+      // Small delay to ensure DOM is ready
+      const t = setTimeout(() => {
+        if (win.turnstile) {
+          renderTurnstile();
+        } else {
+          win.onTurnstileLoad = () => renderTurnstile();
+        }
+      }, 100);
+      return () => clearTimeout(t);
+    } else {
+      setTurnstileToken(null);
+      if (turnstileWidgetId.current && win.turnstile) {
+        try { win.turnstile.remove(turnstileWidgetId.current); } catch {}
+        turnstileWidgetId.current = null;
+      }
+    }
+  }, [isSignUp, renderTurnstile]);
 
   const handleSelfieCapture = (file: File) => {
     setSelfieFile(file);
@@ -33,19 +85,36 @@ const LoginPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Honeypot check - bots fill this hidden field
     if (honeypot) return;
     if (isSignUp && !selfieFile) {
       toast.error("Please take a selfie to complete signup");
       return;
     }
+    if (isSignUp && !turnstileToken) {
+      toast.error("Please complete the CAPTCHA verification");
+      return;
+    }
+
     setLoading(true);
     try {
+      // Verify turnstile token server-side for signups
+      if (isSignUp) {
+        const { data: verifyData, error: verifyError } = await supabase.functions.invoke("verify-turnstile", {
+          body: { token: turnstileToken },
+        });
+        if (verifyError || !verifyData?.success) {
+          toast.error("CAPTCHA verification failed. Please try again.");
+          // Reset widget
+          renderTurnstile();
+          setLoading(false);
+          return;
+        }
+      }
+
       if (isSignUp) {
         const { error, userId } = await signUp(email, password, name);
         if (error) throw error;
 
-        // Upload selfie and set as profile picture
         if (selfieFile && userId) {
           const selfiePath = `${userId}/selfie.jpg`;
           const avatarPath = `${userId}/avatar.jpg`;
@@ -81,6 +150,7 @@ const LoginPage = () => {
       setLoading(false);
     }
   };
+
   if (showVerifyMessage) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-primary px-6">
@@ -133,12 +203,19 @@ const LoginPage = () => {
           </button>
         </div>
 
-        {/* Honeypot - hidden from real users, bots will fill it */}
+        {/* Honeypot - hidden from real users */}
         <div className="absolute -left-[9999px] opacity-0" aria-hidden="true">
           <input type="text" name="website" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
         </div>
 
-        <button type="submit" disabled={loading} className="w-full rounded-xl bg-primary-foreground py-3 text-sm font-bold text-primary disabled:opacity-60 flex items-center justify-center gap-2">
+        {/* Cloudflare Turnstile CAPTCHA - only on signup */}
+        {isSignUp && (
+          <div className="flex justify-center py-1">
+            <div ref={turnstileRef} />
+          </div>
+        )}
+
+        <button type="submit" disabled={loading || (isSignUp && !turnstileToken)} className="w-full rounded-xl bg-primary-foreground py-3 text-sm font-bold text-primary disabled:opacity-60 flex items-center justify-center gap-2">
           {loading && <Loader2 size={16} className="animate-spin" />}
           {isSignUp ? "Create Account" : "Log In"}
         </button>
