@@ -5,12 +5,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Send, ImagePlus, X } from "lucide-react";
+import { ArrowLeft, Send, ImagePlus, X, Phone } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import AudioPlayer from "@/components/AudioPlayer";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { compressImage } from "@/lib/image-utils";
+import { useVoiceCall } from "@/hooks/useVoiceCall";
+import { IncomingCallOverlay, ActiveCallBar } from "@/components/CallUI";
 
 interface Message {
   id: string;
@@ -59,6 +62,24 @@ const ChatPage = () => {
   const [loading, setLoading] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const {
+    callStatus,
+    callId,
+    isMuted,
+    callDuration,
+    startCall,
+    answerCall,
+    rejectCall,
+    endCall,
+    toggleMute,
+    toggleSpeaker,
+  } = useVoiceCall({
+    partnerId: userId || "",
+    onIncomingCall: (incomingCallId, callerId) => {
+      // Call UI will show via callStatus === "ringing"
+    },
+  });
 
   const scrollToBottom = () => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
@@ -186,6 +207,32 @@ const ChatPage = () => {
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-height))] flex-col">
+      {/* Call Overlays */}
+      <AnimatePresence>
+        {callStatus === "ringing" && partner && (
+          <IncomingCallOverlay
+            callerName={partner.name}
+            callerAvatar={partner.avatar_url || undefined}
+            onAnswer={() => callId && answerCall(callId)}
+            onReject={() => callId && rejectCall(callId)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {(callStatus === "calling" || callStatus === "connected") && partner && (
+          <ActiveCallBar
+            partnerName={partner.name}
+            callStatus={callStatus}
+            duration={callDuration}
+            isMuted={isMuted}
+            onToggleMute={toggleMute}
+            onToggleSpeaker={toggleSpeaker}
+            onEndCall={endCall}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Chat Header */}
       <div className="flex items-center justify-between border-b border-border bg-card px-3 py-2.5">
         <div className="flex items-center gap-3">
@@ -204,9 +251,20 @@ const ChatPage = () => {
             </div>
           )}
         </div>
-        <Button variant="ghost" size="icon" onClick={() => navigate("/messages")} className="shrink-0">
-          <X size={20} />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={startCall}
+            disabled={callStatus !== "idle"}
+            className="shrink-0 text-primary"
+          >
+            <Phone size={20} />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => navigate("/messages")} className="shrink-0">
+            <X size={20} />
+          </Button>
+        </div>
       </div>
 
       {/* Messages */}
