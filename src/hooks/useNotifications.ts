@@ -48,7 +48,8 @@ export const useNotifications = () => {
     });
 
     setNotifications(enriched);
-    setUnreadCount(enriched.filter(n => !n.read_at).length);
+    // Only count non-message notifications as unread for the bell icon
+    setUnreadCount(enriched.filter(n => !n.read_at && n.type !== "message").length);
     setLoading(false);
   }, [user]);
 
