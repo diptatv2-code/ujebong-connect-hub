@@ -27,8 +27,16 @@ const LoginPage = () => {
   const turnstileWidgetId = useRef<string | null>(null);
   const [unverifiedUserId, setUnverifiedUserId] = useState<string | null>(null);
   const [resendingVerification, setResendingVerification] = useState(false);
+  const signingUpRef = useRef(false);
   const navigate = useNavigate();
-  const { signUp, signIn, resendVerification } = useAuth();
+  const { user, signUp, signIn, resendVerification } = useAuth();
+
+  // Redirect logged-in verified users away from login page (but not during signup flow)
+  useEffect(() => {
+    if (user && !signingUpRef.current && !showVerifyMessage) {
+      navigate("/", { replace: true });
+    }
+  }, [user, showVerifyMessage, navigate]);
 
   // Load Turnstile script
   useEffect(() => {
@@ -115,8 +123,12 @@ const LoginPage = () => {
       }
 
       if (isSignUp) {
+        signingUpRef.current = true;
         const { error, userId } = await signUp(email, password, name);
-        if (error) throw error;
+        if (error) {
+          signingUpRef.current = false;
+          throw error;
+        }
 
         if (selfieFile && userId) {
           const compressed = await compressImage(selfieFile, { maxWidth: 400, quality: 0.7 });
@@ -134,6 +146,10 @@ const LoginPage = () => {
           }
         }
 
+        // Sign out after selfie upload — user must verify email first
+        await supabase.auth.signOut();
+        signingUpRef.current = false;
+        if (userId) setUnverifiedUserId(userId);
         setShowVerifyMessage(true);
       } else {
         const { error, emailVerified, userId } = await signIn(email, password);
