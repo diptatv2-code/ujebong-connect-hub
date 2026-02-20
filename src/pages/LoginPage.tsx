@@ -16,6 +16,8 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [selfieFile, setSelfieFile] = useState<File | null>(null);
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
+  const [honeypot, setHoneypot] = useState("");
+  const [showVerifyMessage, setShowVerifyMessage] = useState(false);
   const navigate = useNavigate();
   const { signUp, signIn } = useAuth();
 
@@ -31,6 +33,8 @@ const LoginPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Honeypot check - bots fill this hidden field
+    if (honeypot) return;
     if (isSignUp && !selfieFile) {
       toast.error("Please take a selfie to complete signup");
       return;
@@ -48,7 +52,6 @@ const LoginPage = () => {
           const { error: uploadErr } = await supabase.storage.from("selfies").upload(selfiePath, selfieFile);
           if (!uploadErr) {
             const { data } = supabase.storage.from("selfies").getPublicUrl(selfiePath);
-            // Also upload to avatars bucket as profile picture
             await supabase.storage.from("avatars").upload(avatarPath, selfieFile, { upsert: true });
             const { data: avatarData } = supabase.storage.from("avatars").getPublicUrl(avatarPath);
             await supabase.from("profiles").update({
@@ -58,19 +61,44 @@ const LoginPage = () => {
           }
         }
 
-        toast.success("Account created! Welcome to Ujebong!");
+        setShowVerifyMessage(true);
       } else {
         const { error } = await signIn(email, password);
-        if (error) throw error;
+        if (error) {
+          if (error.message?.includes("Email not confirmed")) {
+            toast.error("Please verify your email before logging in. Check your inbox.");
+          } else {
+            throw error;
+          }
+          return;
+        }
         toast.success("Welcome back!");
+        navigate("/");
       }
-      navigate("/");
     } catch (err: any) {
       toast.error(err.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
   };
+  if (showVerifyMessage) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-primary px-6">
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center max-w-sm">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-foreground/20">
+            <span className="text-3xl">✉️</span>
+          </div>
+          <h2 className="text-xl font-bold text-primary-foreground">Check your email</h2>
+          <p className="mt-2 text-sm text-primary-foreground/70">
+            We've sent a verification link to <strong className="text-primary-foreground">{email}</strong>. Please click the link to verify your account before logging in.
+          </p>
+          <button onClick={() => { setShowVerifyMessage(false); setIsSignUp(false); }} className="mt-6 rounded-xl bg-primary-foreground px-6 py-3 text-sm font-bold text-primary">
+            Go to Login
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   const inputClass = "w-full rounded-xl bg-primary-foreground/10 px-4 py-3 text-sm text-primary-foreground placeholder:text-primary-foreground/50 outline-none backdrop-blur-sm border border-primary-foreground/20";
 
@@ -103,6 +131,11 @@ const LoginPage = () => {
           <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-foreground/50">
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
+        </div>
+
+        {/* Honeypot - hidden from real users, bots will fill it */}
+        <div className="absolute -left-[9999px] opacity-0" aria-hidden="true">
+          <input type="text" name="website" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
         </div>
 
         <button type="submit" disabled={loading} className="w-full rounded-xl bg-primary-foreground py-3 text-sm font-bold text-primary disabled:opacity-60 flex items-center justify-center gap-2">
