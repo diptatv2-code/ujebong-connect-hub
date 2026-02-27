@@ -13,6 +13,10 @@ const win = window as any;
 
 const LoginPage = () => {
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -186,6 +190,81 @@ const LoginPage = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+    setForgotLoading(true);
+    try {
+      const { error } = await supabase.functions.invoke("send-reset-email", {
+        body: { email: forgotEmail.trim() },
+      });
+      if (error) throw error;
+      setForgotSent(true);
+    } catch (err: any) {
+      toast.error(err.message || "Something went wrong");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  if (showForgotPassword) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-primary px-6">
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center max-w-sm w-full">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-foreground/20">
+            <span className="text-3xl">🔑</span>
+          </div>
+          {forgotSent ? (
+            <>
+              <h2 className="text-xl font-bold text-primary-foreground">Check your email</h2>
+              <p className="mt-2 text-sm text-primary-foreground/70">
+                If an account exists with <strong className="text-primary-foreground">{forgotEmail}</strong>, we've sent a password reset link from <strong className="text-primary-foreground">noreply@ujebong.com</strong>.
+              </p>
+              <button
+                onClick={() => { setShowForgotPassword(false); setForgotSent(false); setForgotEmail(""); }}
+                className="mt-6 w-full rounded-xl bg-primary-foreground px-6 py-3 text-sm font-bold text-primary"
+              >
+                Back to Login
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-bold text-primary-foreground">Forgot Password?</h2>
+              <p className="mt-2 text-sm text-primary-foreground/70">
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
+              <form onSubmit={handleForgotPassword} className="mt-6 space-y-3">
+                <input
+                  type="email"
+                  placeholder="Email address"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  className="w-full rounded-xl bg-primary-foreground/10 px-4 py-3 text-sm text-primary-foreground placeholder:text-primary-foreground/50 outline-none backdrop-blur-sm border border-primary-foreground/20"
+                  required
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={forgotLoading}
+                  className="w-full rounded-xl bg-primary-foreground py-3 text-sm font-bold text-primary disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {forgotLoading && <Loader2 size={16} className="animate-spin" />}
+                  Send Reset Link
+                </button>
+              </form>
+              <button
+                onClick={() => setShowForgotPassword(false)}
+                className="mt-4 text-sm text-primary-foreground/70 underline"
+              >
+                Back to Login
+              </button>
+            </>
+          )}
+        </motion.div>
+      </div>
+    );
+  }
+
   if (showVerifyMessage) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-primary px-6">
@@ -247,6 +326,15 @@ const LoginPage = () => {
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
+
+        {/* Forgot Password - only on login */}
+        {!isSignUp && (
+          <div className="text-right">
+            <button type="button" onClick={() => setShowForgotPassword(true)} className="text-xs text-primary-foreground/70 underline">
+              Forgot Password?
+            </button>
+          </div>
+        )}
 
         {/* Honeypot - hidden from real users */}
         <div className="absolute -left-[9999px] opacity-0" aria-hidden="true">
