@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     }
 
     if (profile.email_verified) {
-      return new Response(successPage("Your email is already verified! You can log in now."), {
+      return new Response(successPage("Your account is already verified! Please log in using your email and password."), {
         headers: { "Content-Type": "text/html" },
       });
     }
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
       email_verification_expires_at: null,
     }).eq("id", userId);
 
-    return new Response(successPage("Your email has been verified! You can now log in to Ujebong."), {
+    return new Response(successPage("Your account has been verified successfully! Please log in using your email and password."), {
       headers: { "Content-Type": "text/html" },
     });
   } catch (error) {

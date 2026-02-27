@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.migrate-to-cloudinary]
 verify_jwt = false
+
+[functions.send-reset-email]
+verify_jwt = false
+
+[functions.reset-password]
+verify_jwt = false

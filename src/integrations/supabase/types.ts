@@ -471,6 +471,8 @@ export type Database = {
           is_verified: boolean
           last_active_at: string | null
           name: string
+          password_reset_expires_at: string | null
+          password_reset_token: string | null
           selfie_url: string | null
           updated_at: string
         }
@@ -487,6 +489,8 @@ export type Database = {
           is_verified?: boolean
           last_active_at?: string | null
           name?: string
+          password_reset_expires_at?: string | null
+          password_reset_token?: string | null
           selfie_url?: string | null
           updated_at?: string
         }
@@ -503,6 +507,8 @@ export type Database = {
           is_verified?: boolean
           last_active_at?: string | null
           name?: string
+          password_reset_expires_at?: string | null
+          password_reset_token?: string | null
           selfie_url?: string | null
           updated_at?: string
         }
