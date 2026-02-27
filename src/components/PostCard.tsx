@@ -10,7 +10,7 @@ import type { PostWithProfile } from "@/pages/FeedsPage";
 import { formatDistanceToNow } from "date-fns";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import AudioPlayer from "@/components/AudioPlayer";
-import { optimizeImageUrl } from "@/lib/image-utils";
+import CloudinaryImage from "@/components/CloudinaryImage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const REACTIONS = [
@@ -270,9 +270,12 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
       <p className="px-4 pb-2 text-sm leading-relaxed text-foreground">{post.content}</p>
 
       {post.image_url && (
-      <div className="w-full overflow-hidden bg-muted">
-          <img src={post.image_url} alt="Post" className="w-full object-contain" loading="lazy" />
-        </div>
+        <CloudinaryImage
+          src={post.image_url}
+          alt="Post"
+          className="w-full object-contain"
+          width={800}
+        />
       )}
 
       {(post.like_count > 0 || post.comment_count > 0) && (

@@ -11,7 +11,7 @@ import VoiceRecorder from "@/components/VoiceRecorder";
 import AudioPlayer from "@/components/AudioPlayer";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
-import { compressImage } from "@/lib/image-utils";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 import { useVoiceCall } from "@/hooks/useVoiceCall";
 import { IncomingCallOverlay, ActiveCallScreen } from "@/components/CallUI";
 
@@ -158,15 +158,13 @@ const ChatPage = () => {
     let audio_url: string | null = null;
 
     if (imageFile) {
-      const compressed = await compressImage(imageFile, { maxWidth: 1080, quality: 0.75 });
-      const path = `${user.id}/${Date.now()}.jpg`;
-      const { error } = await supabase.storage.from("messages").upload(path, compressed, { contentType: "image/jpeg" });
-      if (error) {
-        toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+      try {
+        image_url = await uploadToCloudinary(imageFile, "ujebong/messages", { maxWidth: 1080, quality: 0.75 });
+      } catch (err) {
+        toast({ title: "Upload failed", description: "Image upload failed", variant: "destructive" });
         setSending(false);
         return;
       }
-      image_url = path;
     }
 
     if (audioFile) {

@@ -1,9 +1,8 @@
 import { useState, useRef } from "react";
 import { X, Image, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { compressImage } from "@/lib/image-utils";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 
 interface CreatePostDialogProps {
   open: boolean;
@@ -39,13 +38,10 @@ const CreatePostDialog = ({ open, onClose, onPost, userName = "You" }: CreatePos
 
     let imageUrl: string | undefined;
     if (imageFile && user) {
-      const compressed = await compressImage(imageFile, { maxWidth: 1080, quality: 0.75 });
-      const ext = "jpg";
-      const path = `${user.id}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("posts").upload(path, compressed, { contentType: "image/jpeg" });
-      if (!error) {
-        const { data } = supabase.storage.from("posts").getPublicUrl(path);
-        imageUrl = data.publicUrl;
+      try {
+        imageUrl = await uploadToCloudinary(imageFile, "ujebong/posts", { maxWidth: 1080, quality: 0.75 });
+      } catch (err) {
+        console.error("Cloudinary upload failed:", err);
       }
     }
 

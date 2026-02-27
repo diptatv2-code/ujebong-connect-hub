@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import PostCard from "@/components/PostCard";
 import type { PostWithProfile } from "@/pages/FeedsPage";
 import { toast } from "sonner";
-import { compressImage } from "@/lib/image-utils";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 import { formatDistanceToNow } from "date-fns";
 
 const ProfilePage = () => {
@@ -196,16 +196,15 @@ const ProfilePage = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     setUploading(true);
-    const compressed = await compressImage(file, { maxWidth: 400, quality: 0.7 });
-    const path = `${user.id}/avatar.jpg`;
-    const { error } = await supabase.storage.from("avatars").upload(path, compressed, { upsert: true, contentType: "image/jpeg" });
-    if (error) { toast.error("Upload failed"); setUploading(false); return; }
-    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-    const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;
-    await supabase.from("profiles").update({ avatar_url: avatarUrl }).eq("id", user.id);
-    setProfile((p: any) => ({ ...p, avatar_url: avatarUrl }));
+    try {
+      const avatarUrl = await uploadToCloudinary(file, "ujebong/avatars", { maxWidth: 400, quality: 0.7 });
+      await supabase.from("profiles").update({ avatar_url: avatarUrl }).eq("id", user.id);
+      setProfile((p: any) => ({ ...p, avatar_url: avatarUrl }));
+      toast.success("Profile photo updated!");
+    } catch (err) {
+      toast.error("Upload failed");
+    }
     setUploading(false);
-    toast.success("Profile photo updated!");
   };
 
   const handleSignOut = async () => {
