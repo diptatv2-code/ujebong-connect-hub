@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.verify-email]
 verify_jwt = false
+
+[functions.cloudinary-upload]
+verify_jwt = false
+
+[functions.migrate-to-cloudinary]
+verify_jwt = false
