@@ -21,6 +21,11 @@ import ChatPage from "./pages/ChatPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import InstallPage from "./pages/InstallPage";
 import NotFound from "./pages/NotFound";
+import CulturalEventsPage from "./pages/CulturalEventsPage";
+import CommunityPollsPage from "./pages/CommunityPollsPage";
+import JobPortalPage from "./pages/JobPortalPage";
+import ScholarshipPage from "./pages/ScholarshipPage";
+import MorePage from "./pages/MorePage";
 import { useLastActive } from "@/hooks/useLastActive";
 
 const queryClient = new QueryClient();
@@ -73,6 +78,11 @@ const AppRoutes = () => {
         <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
         <Route path="/chat/:userId" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+        <Route path="/events" element={<ProtectedRoute><CulturalEventsPage /></ProtectedRoute>} />
+        <Route path="/polls" element={<ProtectedRoute><CommunityPollsPage /></ProtectedRoute>} />
+        <Route path="/jobs" element={<ProtectedRoute><JobPortalPage /></ProtectedRoute>} />
+        <Route path="/scholarships" element={<ProtectedRoute><ScholarshipPage /></ProtectedRoute>} />
+        <Route path="/more" element={<ProtectedRoute><MorePage /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
         <Route path="/install" element={<InstallPage />} />
         <Route path="*" element={<NotFound />} />

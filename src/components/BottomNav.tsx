@@ -1,13 +1,14 @@
-import { Home, Users, MessageCircle, UsersRound } from "lucide-react";
+import { Home, Users, MessageCircle, UsersRound, LayoutGrid } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 
 const tabs = [
   { path: "/", icon: Home, label: "Feeds" },
-  { path: "/friends", icon: Users, label: "All Users" },
+  { path: "/friends", icon: Users, label: "Users" },
   { path: "/groups", icon: UsersRound, label: "Groups" },
   { path: "/messages", icon: MessageCircle, label: "Messages" },
+  { path: "/more", icon: LayoutGrid, label: "More" },
 ];
 
 const BottomNav = () => {

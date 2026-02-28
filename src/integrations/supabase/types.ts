@@ -68,6 +68,75 @@ export type Database = {
         }
         Relationships: []
       }
+      community_polls: {
+        Row: {
+          created_at: string
+          description: string | null
+          ends_at: string | null
+          id: string
+          question: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          question: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          question?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      cultural_events: {
+        Row: {
+          category: string
+          created_at: string
+          description: string
+          district: string
+          end_date: string | null
+          event_date: string
+          id: string
+          image_url: string | null
+          location: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string
+          district?: string
+          end_date?: string | null
+          event_date: string
+          id?: string
+          image_url?: string | null
+          location?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string
+          district?: string
+          end_date?: string | null
+          event_date?: string
+          id?: string
+          image_url?: string | null
+          location?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       friendships: {
         Row: {
           addressee_id: string
@@ -297,6 +366,48 @@ export type Database = {
         }
         Relationships: []
       }
+      jobs: {
+        Row: {
+          company: string
+          contact_info: string | null
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          job_type: string
+          location: string
+          salary_range: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          company?: string
+          contact_info?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          job_type?: string
+          location?: string
+          salary_range?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          company?: string
+          contact_info?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          job_type?: string
+          location?: string
+          salary_range?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           audio_url: string | null
@@ -365,6 +476,74 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      poll_options: {
+        Row: {
+          created_at: string
+          id: string
+          option_text: string
+          poll_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          option_text: string
+          poll_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          option_text?: string
+          poll_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poll_options_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "community_polls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poll_votes: {
+        Row: {
+          created_at: string
+          id: string
+          option_id: string
+          poll_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          option_id: string
+          poll_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          option_id?: string
+          poll_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poll_votes_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: false
+            referencedRelation: "poll_options"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "poll_votes_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "community_polls"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       post_comments: {
         Row: {
@@ -550,6 +729,48 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      scholarships: {
+        Row: {
+          category: string
+          created_at: string
+          deadline: string | null
+          description: string
+          eligibility: string | null
+          id: string
+          is_verified: boolean
+          link: string | null
+          organization: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          deadline?: string | null
+          description?: string
+          eligibility?: string | null
+          id?: string
+          is_verified?: boolean
+          link?: string | null
+          organization?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          deadline?: string | null
+          description?: string
+          eligibility?: string | null
+          id?: string
+          is_verified?: boolean
+          link?: string | null
+          organization?: string
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }
