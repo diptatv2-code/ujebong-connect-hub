@@ -122,8 +122,8 @@ const CommunityPollsPage = () => {
   };
 
   return (
-    <div className="pb-16 pt-14">
-      <div className="sticky top-14 z-30 bg-card border-b border-border px-4 py-3 flex items-center justify-between">
+    <div className="pb-16 pt-header">
+      <div className="sticky top-header z-30 bg-card border-b border-border px-4 py-3 flex items-center justify-between">
         <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
           <BarChart3 size={20} className="text-primary" /> Community Polls
         </h2>

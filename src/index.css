@@ -114,6 +114,12 @@
   .safe-top {
     padding-top: env(safe-area-inset-top, 0px);
   }
+  .pt-header {
+    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
+  }
+  .top-header {
+    top: calc(3.5rem + env(safe-area-inset-top, 0px));
+  }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }

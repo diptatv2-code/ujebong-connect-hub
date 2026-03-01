@@ -17,7 +17,7 @@ const MorePage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="pb-16 pt-14">
+    <div className="pb-16 pt-header">
       <div className="px-4 py-4">
         <h2 className="text-lg font-bold text-foreground mb-1">Explore</h2>
         <p className="text-xs text-muted-foreground mb-4">Discover community features and services</p>

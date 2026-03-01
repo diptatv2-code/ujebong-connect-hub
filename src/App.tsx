@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useApproval } from "@/hooks/useApproval";
 import BottomNav from "./components/BottomNav";
 import AppHeader from "./components/AppHeader";
+import GlobalNotificationListener from "./components/GlobalNotificationListener";
+import GlobalCallListener from "./components/GlobalCallListener";
 import FeedsPage from "./pages/FeedsPage";
 import FriendsPage from "./pages/FriendsPage";
 import SearchPage from "./pages/SearchPage";
@@ -66,6 +68,8 @@ const AppRoutes = () => {
   return (
     <div className="mx-auto max-w-lg">
       <AppHeader />
+      <GlobalNotificationListener />
+      <GlobalCallListener />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/pending" element={user ? <PendingApprovalPage /> : <Navigate to="/login" replace />} />

@@ -88,8 +88,8 @@ const ScholarshipPage = () => {
   const catLabel = (c: string) => c.split("-").map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
 
   return (
-    <div className="pb-16 pt-14">
-      <div className="sticky top-14 z-30 bg-card border-b border-border px-4 py-3 space-y-2">
+    <div className="pb-16 pt-header">
+      <div className="sticky top-header z-30 bg-card border-b border-border px-4 py-3 space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
             <GraduationCap size={20} className="text-primary" /> Scholarships

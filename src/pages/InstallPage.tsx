@@ -38,7 +38,7 @@ const InstallPage = () => {
 
   if (isInstalled) {
     return (
-      <div className="flex min-h-[80vh] flex-col items-center justify-center gap-4 px-6 pt-14 text-center">
+      <div className="flex min-h-[80vh] flex-col items-center justify-center gap-4 px-6 pt-header text-center">
         <CheckCircle size={64} className="text-green-500" />
         <h1 className="text-2xl font-bold text-foreground">App Installed!</h1>
         <p className="text-muted-foreground">Ujebong is installed on your device. Open it from your home screen.</p>
@@ -47,7 +47,7 @@ const InstallPage = () => {
   }
 
   return (
-    <div className="flex min-h-[80vh] flex-col items-center justify-center gap-6 px-6 pt-14 text-center">
+    <div className="flex min-h-[80vh] flex-col items-center justify-center gap-6 px-6 pt-header text-center">
       <Smartphone size={64} className="text-primary" />
       <h1 className="text-2xl font-bold text-foreground">Install Ujebong</h1>
       <p className="max-w-sm text-muted-foreground">

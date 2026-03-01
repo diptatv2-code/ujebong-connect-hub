@@ -71,7 +71,7 @@ const GroupsListPage = () => {
   };
 
   return (
-    <div className="pb-16 pt-14">
+    <div className="pb-16 pt-header">
       <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <h2 className="text-lg font-bold text-foreground">Groups</h2>
         <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">

@@ -101,7 +101,7 @@ const FriendsPage = () => {
   if (loading) return <div className="flex items-center justify-center pt-20"><div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
 
   return (
-    <div className="pb-16 pt-14">
+    <div className="pb-16 pt-header">
       <div className="flex border-b border-border bg-card">
         {(["all", "friends"] as const).map((tab) => (
           <button key={tab} onClick={() => setFilter(tab)} className={`flex-1 py-3 text-sm font-medium transition-colors ${filter === tab ? "border-b-2 border-primary text-primary" : "text-muted-foreground"}`}>

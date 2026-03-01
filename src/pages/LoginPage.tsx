@@ -10,6 +10,8 @@ import { compressImage } from "@/lib/image-utils";
 
 const TURNSTILE_SITE_KEY = "0x4AAAAAACfzI-S-IHLfWXtI";
 const win = window as any;
+// Detect if running inside a native app (Capacitor) where Turnstile won't work
+const isNativeApp = !!(win.Capacitor?.isNativePlatform?.() || win.Capacitor?.isPluginAvailable);
 
 const LoginPage = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -42,8 +44,9 @@ const LoginPage = () => {
     }
   }, [user, showVerifyMessage, navigate]);
 
-  // Load Turnstile script
+  // Load Turnstile script (skip in native app)
   useEffect(() => {
+    if (isNativeApp) return;
     if (document.getElementById("cf-turnstile-script")) return;
     const script = document.createElement("script");
     script.id = "cf-turnstile-script";
@@ -67,10 +70,13 @@ const LoginPage = () => {
     });
   }, []);
 
-  // Render widget when switching to signup
+  // Render widget when switching to signup (skip in native app)
   useEffect(() => {
+    if (isNativeApp) {
+      setTurnstileToken("native-bypass");
+      return;
+    }
     if (isSignUp) {
-      // Small delay to ensure DOM is ready
       const t = setTimeout(() => {
         if (win.turnstile) {
           renderTurnstile();
@@ -112,8 +118,8 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      // Verify turnstile token server-side for signups
-      if (isSignUp) {
+      // Verify turnstile token server-side for signups (skip for native apps)
+      if (isSignUp && !isNativeApp) {
         const { data: verifyData, error: verifyError } = await supabase.functions.invoke("verify-turnstile", {
           body: { token: turnstileToken },
         });
@@ -341,8 +347,8 @@ const LoginPage = () => {
           <input type="text" name="website" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
         </div>
 
-        {/* Cloudflare Turnstile CAPTCHA - only on signup */}
-        {isSignUp && (
+        {/* Cloudflare Turnstile CAPTCHA - only on signup, skip for native apps */}
+        {isSignUp && !isNativeApp && (
           <div className="flex justify-center py-1">
             <div ref={turnstileRef} />
           </div>

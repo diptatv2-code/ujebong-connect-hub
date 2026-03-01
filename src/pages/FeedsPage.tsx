@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, Download, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import PostCard from "@/components/PostCard";
 import CreatePostDialog from "@/components/CreatePostDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,7 +47,8 @@ const FeedSkeleton = () => (
 );
 
 const FeedsPage = () => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<PostWithProfile[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -173,7 +175,7 @@ const FeedsPage = () => {
   return (
     <div
       ref={containerRef}
-      className="pb-16 pt-14 min-h-screen"
+      className="pb-16 pt-header min-h-screen"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -208,6 +210,24 @@ const FeedsPage = () => {
           ))
         )}
       </div>
+
+      {/* Bottom actions */}
+      {!loading && posts.length > 0 && (
+        <div className="bg-card border-t border-border px-4 py-6 space-y-3">
+          <button
+            onClick={() => navigate("/install")}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground"
+          >
+            <Download size={18} /> Download the App
+          </button>
+          <button
+            onClick={async () => { await signOut(); navigate("/login"); }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-secondary py-3 text-sm font-medium text-foreground"
+          >
+            <LogOut size={18} /> Log Out
+          </button>
+        </div>
+      )}
 
       {/* FAB */}
       <motion.button

@@ -151,7 +151,7 @@ const AdminPage = () => {
         <h2 className="text-base font-semibold text-foreground">Admin Panel</h2>
       </div>
 
-      <div className="pt-14">
+      <div className="pt-header">
         {/* Main Tabs: Users | Reports */}
         <div className="flex border-b border-border bg-card">
           <button onClick={() => setTab("users")} className={`flex-1 py-3 text-sm font-medium ${tab === "users" ? "border-b-2 border-primary text-primary" : "text-muted-foreground"}`}>
