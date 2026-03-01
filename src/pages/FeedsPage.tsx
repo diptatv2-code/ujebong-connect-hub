@@ -53,6 +53,7 @@ const FeedsPage = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
@@ -205,29 +206,41 @@ const FeedsPage = () => {
         ) : posts.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-12">No posts yet. Be the first to share!</p>
         ) : (
-          posts.map((post) => (
-            <PostCard key={post.id} post={post} onReaction={handleReaction} onComment={handleComment} onDelete={(id) => setPosts(prev => prev.filter(p => p.id !== id))} currentUserId={user?.id} />
-          ))
+          <>
+            {(showAll ? posts : posts.slice(0, 10)).map((post) => (
+              <PostCard key={post.id} post={post} onReaction={handleReaction} onComment={handleComment} onDelete={(id) => setPosts(prev => prev.filter(p => p.id !== id))} currentUserId={user?.id} />
+            ))}
+
+            {/* See More / Bottom Actions */}
+            {!showAll && posts.length > 10 ? (
+              <div className="bg-card px-4 py-4">
+                <button
+                  onClick={() => setShowAll(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground"
+                >
+                  See More ({posts.length - 10} more posts)
+                </button>
+              </div>
+            ) : null}
+
+            {/* Download & Logout always visible after posts */}
+            <div className="bg-card border-t border-border px-4 py-6 space-y-3">
+              <button
+                onClick={() => navigate("/install")}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground"
+              >
+                <Download size={18} /> Download the App
+              </button>
+              <button
+                onClick={async () => { await signOut(); navigate("/login"); }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-secondary py-3 text-sm font-medium text-foreground"
+              >
+                <LogOut size={18} /> Log Out
+              </button>
+            </div>
+          </>
         )}
       </div>
-
-      {/* Bottom actions */}
-      {!loading && posts.length > 0 && (
-        <div className="bg-card border-t border-border px-4 py-6 space-y-3">
-          <button
-            onClick={() => navigate("/install")}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground"
-          >
-            <Download size={18} /> Download the App
-          </button>
-          <button
-            onClick={async () => { await signOut(); navigate("/login"); }}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-secondary py-3 text-sm font-medium text-foreground"
-          >
-            <LogOut size={18} /> Log Out
-          </button>
-        </div>
-      )}
 
       {/* FAB */}
       <motion.button
