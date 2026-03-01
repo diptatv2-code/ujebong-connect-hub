@@ -45,7 +45,7 @@ const SearchPage = () => {
   };
 
   return (
-    <div className="pb-16 pt-14">
+    <div className="pb-16 pt-header">
       <div className="bg-card px-4 py-3">
         <div className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2.5">
           <Search size={18} className="text-muted-foreground" />

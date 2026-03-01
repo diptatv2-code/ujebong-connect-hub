@@ -67,7 +67,7 @@ const NotificationsPage = () => {
   };
 
   return (
-    <div className="pb-16 pt-14">
+    <div className="pb-16 pt-header">
       <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <h2 className="text-lg font-bold text-foreground">Notifications</h2>
         {unreadCount > 0 && (

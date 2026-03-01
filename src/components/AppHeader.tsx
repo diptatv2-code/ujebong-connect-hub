@@ -16,7 +16,7 @@ const AppHeader = () => {
   const initial = user?.user_metadata?.name?.[0]?.toUpperCase() || "U";
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-card safe-top">
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-card safe-top" id="app-header">
       <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-4">
         <h1 className="cursor-pointer text-xl font-extrabold text-primary" onClick={() => navigate("/")}>
           Ujebong <span className="text-xs font-normal text-muted-foreground ml-1">by Pop Senek & Dipta</span>
