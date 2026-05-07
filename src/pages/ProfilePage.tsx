@@ -94,28 +94,53 @@ const ProfilePage = () => {
     if (!user) return;
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
+
+    // Snapshot current state for rollback in case the write fails (BUG-021/026).
+    const previous = posts;
+
+    // Optimistic update: only the reacted post mutates, no full feed refetch.
+    const applyLocal = (action: "remove" | "change" | "add") => {
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          const counts = { ...p.reaction_counts };
+          const prevType = p.my_reaction;
+          if (action === "remove" && prevType) {
+            counts[prevType] = Math.max(0, (counts[prevType] || 0) - 1);
+            return { ...p, like_count: p.like_count - 1, liked_by_me: false, my_reaction: null, reaction_counts: counts };
+          }
+          if (action === "change" && prevType) {
+            counts[prevType] = Math.max(0, (counts[prevType] || 0) - 1);
+            counts[reactionType] = (counts[reactionType] || 0) + 1;
+            return { ...p, my_reaction: reactionType, reaction_counts: counts };
+          }
+          // add
+          counts[reactionType] = (counts[reactionType] || 0) + 1;
+          return { ...p, like_count: p.like_count + 1, liked_by_me: true, my_reaction: reactionType, reaction_counts: counts };
+        })
+      );
+    };
+
+    let action: "remove" | "change" | "add";
+    let result;
     if (post.my_reaction === reactionType) {
-      await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", user.id);
+      action = "remove";
+      applyLocal(action);
+      result = await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", user.id);
     } else if (post.liked_by_me) {
-      await supabase.from("post_likes").update({ reaction_type: reactionType }).eq("post_id", postId).eq("user_id", user.id);
+      action = "change";
+      applyLocal(action);
+      result = await supabase.from("post_likes").update({ reaction_type: reactionType }).eq("post_id", postId).eq("user_id", user.id);
     } else {
-      await supabase.from("post_likes").insert({ post_id: postId, user_id: user.id, reaction_type: reactionType });
+      action = "add";
+      applyLocal(action);
+      result = await supabase.from("post_likes").insert({ post_id: postId, user_id: user.id, reaction_type: reactionType });
     }
-    // Refresh
-    const { data: likes } = await supabase.from("post_likes").select("post_id, user_id, reaction_type").in("post_id", posts.map(p => p.id));
-    setPosts(prev => prev.map(p => {
-      const postLikes = likes?.filter(l => l.post_id === p.id) ?? [];
-      const myLike = postLikes.find(l => l.user_id === user.id);
-      const reactionCounts: Record<string, number> = {};
-      postLikes.forEach(l => { const r = l.reaction_type || "like"; reactionCounts[r] = (reactionCounts[r] || 0) + 1; });
-      return {
-        ...p,
-        like_count: postLikes.length,
-        liked_by_me: !!myLike,
-        my_reaction: myLike?.reaction_type || null,
-        reaction_counts: reactionCounts,
-      };
-    }));
+
+    if (result.error) {
+      toast.error("Action failed. Please try again.");
+      setPosts(previous);
+    }
   };
 
   const handleComment = async (postId: string, content: string) => {
@@ -127,7 +152,18 @@ const ProfilePage = () => {
 
   const handleSendRequest = async () => {
     if (!user || !userId) return;
-    await supabase.from("friendships").insert({ requester_id: user.id, addressee_id: userId });
+    const { error } = await supabase
+      .from("friendships")
+      .insert({ requester_id: user.id, addressee_id: userId });
+    if (error) {
+      // BUG-049: differentiate duplicate-request from generic failures.
+      if (error.code === "23505") {
+        toast.error("Friend request already sent or you're already friends.");
+      } else {
+        toast.error("Failed to send friend request.");
+      }
+      return;
+    }
     setFriendStatus("sent");
     toast.success("Friend request sent!");
   };
@@ -187,9 +223,23 @@ const ProfilePage = () => {
     if (!newEmail || newEmail === user.email) return;
     setEmailSaving(true);
     const { error } = await supabase.auth.updateUser({ email: newEmail });
+    if (error) {
+      setEmailSaving(false);
+      toast.error(error.message);
+      return;
+    }
+    // BUG-015: Mark email as unverified at the profile level so the user must
+    // re-verify the new address before they can use the app again. Then sign
+    // them out and redirect to login — they'll be blocked on the verify screen
+    // until they click the link from the new address.
+    await supabase
+      .from("profiles")
+      .update({ email_verified: false, email_verification_token: null })
+      .eq("id", user.id);
     setEmailSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Confirmation email sent to your new address. Please check your inbox.");
+    toast.success("Verification email sent to new address. Please verify before logging in again.");
+    await supabase.auth.signOut();
+    navigate("/login");
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

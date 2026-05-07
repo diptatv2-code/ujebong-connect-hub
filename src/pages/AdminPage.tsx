@@ -5,6 +5,37 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+// BUG-041: selfies bucket is private. selfie_url is now stored as a path; old
+// rows may still hold a full URL, so handle both shapes.
+const SelfieLink = ({ value }: { value: string }) => {
+  const [href, setHref] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (value.startsWith("http")) {
+      setHref(value);
+      return;
+    }
+    supabase.storage.from("selfies").createSignedUrl(value, 3600).then(({ data }) => {
+      if (!cancelled) setHref(data?.signedUrl ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [value]);
+  if (!href) return <span className="text-[10px] font-medium text-muted-foreground">Loading selfie…</span>;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[10px] font-medium text-primary"
+      onClick={(e) => e.stopPropagation()}
+    >
+      View selfie →
+    </a>
+  );
+};
+
 interface UserProfile {
   id: string;
   name: string;
@@ -115,14 +146,21 @@ const AdminPage = () => {
   };
 
   const handleDeletePost = async (postId: string) => {
-    await supabase.from("post_likes").delete().eq("post_id", postId);
-    await supabase.from("post_comments").delete().eq("post_id", postId);
-    await supabase.from("posts").delete().eq("id", postId);
+    // BUG-031: posts has ON DELETE CASCADE — single delete handles likes + comments.
+    const { error } = await supabase.from("posts").delete().eq("id", postId);
+    if (error) {
+      toast.error("Failed to delete post");
+      return;
+    }
     toast.success("Post deleted");
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    await supabase.from("post_comments").delete().eq("id", commentId);
+    const { error } = await supabase.from("post_comments").delete().eq("id", commentId);
+    if (error) {
+      toast.error("Failed to delete comment");
+      return;
+    }
     toast.success("Comment deleted");
   };
 
@@ -201,7 +239,7 @@ const AdminPage = () => {
                             {p.is_approved ? <><UserCheck size={12} className="text-green-500" /> Approved</> : <><Clock size={12} className="text-yellow-500" /> Pending</>}
                           </div>
                           {p.selfie_url && !p.is_approved && (
-                            <a href={p.selfie_url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium text-primary" onClick={e => e.stopPropagation()}>View selfie →</a>
+                            <SelfieLink value={p.selfie_url} />
                           )}
                         </div>
                       </div>
@@ -263,13 +301,21 @@ const AdminPage = () => {
                     {r.status === "pending" && (
                       <div className="flex gap-2 pt-1">
                         {r.post_id && (
-                          <button onClick={() => { handleDeletePost(r.post_id!); handleResolveReport(r.id, "resolved"); }}
+                          <button onClick={async () => {
+                            // BUG-032: await the delete first so the resolve UPDATE
+                            // can't race the cascade.
+                            await handleDeletePost(r.post_id!);
+                            await handleResolveReport(r.id, "resolved");
+                          }}
                             className="flex items-center gap-1 rounded bg-destructive px-2 py-1 text-[10px] text-destructive-foreground">
                             <Trash2 size={10} /> Delete Post
                           </button>
                         )}
                         {r.comment_id && (
-                          <button onClick={() => { handleDeleteComment(r.comment_id!); handleResolveReport(r.id, "resolved"); }}
+                          <button onClick={async () => {
+                            await handleDeleteComment(r.comment_id!);
+                            await handleResolveReport(r.id, "resolved");
+                          }}
                             className="flex items-center gap-1 rounded bg-destructive px-2 py-1 text-[10px] text-destructive-foreground">
                             <Trash2 size={10} /> Delete Comment
                           </button>

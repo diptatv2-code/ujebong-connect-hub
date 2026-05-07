@@ -9,9 +9,20 @@ import SelfieCapture from "@/components/SelfieCapture";
 import { compressImage } from "@/lib/image-utils";
 
 const TURNSTILE_SITE_KEY = "0x4AAAAAACfzI-S-IHLfWXtI";
-const win = window as any;
-// Detect if running inside a native app (Capacitor) where Turnstile won't work
-const isNativeApp = !!(win.Capacitor?.isNativePlatform?.() || win.Capacitor?.isPluginAvailable);
+const win = window as unknown as {
+  Capacitor?: { isNativePlatform?: () => boolean };
+  turnstile?: {
+    render: (el: HTMLElement, opts: Record<string, unknown>) => string;
+    remove: (id: string) => void;
+  };
+  onTurnstileLoad?: () => void;
+};
+// BUG-042: only detect Capacitor as native if isNativePlatform() actually
+// returns true. The previous check OR'd in `isPluginAvailable`, which is a
+// *function* (always truthy), so the bypass triggered in any environment
+// that exposed the Capacitor global.
+const isNativeApp =
+  typeof win.Capacitor?.isNativePlatform === "function" && win.Capacitor.isNativePlatform();
 
 const LoginPage = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -146,11 +157,13 @@ const LoginPage = () => {
           const avatarPath = `${userId}/avatar.jpg`;
           const { error: uploadErr } = await supabase.storage.from("selfies").upload(selfiePath, compressed, { contentType: "image/jpeg" });
           if (!uploadErr) {
-            const { data } = supabase.storage.from("selfies").getPublicUrl(selfiePath);
+            // BUG-041: the selfies bucket is private — getPublicUrl() returns a
+            // 401 link. Store the storage path; admin UI generates a signed URL
+            // on demand.
             await supabase.storage.from("avatars").upload(avatarPath, compressed, { upsert: true, contentType: "image/jpeg" });
             const { data: avatarData } = supabase.storage.from("avatars").getPublicUrl(avatarPath);
             await supabase.from("profiles").update({
-              selfie_url: data.publicUrl,
+              selfie_url: selfiePath,
               avatar_url: avatarData.publicUrl,
             }).eq("id", userId);
           }
@@ -342,9 +355,17 @@ const LoginPage = () => {
           </div>
         )}
 
-        {/* Honeypot - hidden from real users */}
+        {/* Honeypot - hidden from real users (BUG-043) */}
         <div className="absolute -left-[9999px] opacity-0" aria-hidden="true">
-          <input type="text" name="website" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
+          <input
+            type="text"
+            name="email_address_secondary"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            value={honeypot}
+            onChange={(e) => setHoneypot(e.target.value)}
+          />
         </div>
 
         {/* Cloudflare Turnstile CAPTCHA - only on signup, skip for native apps */}

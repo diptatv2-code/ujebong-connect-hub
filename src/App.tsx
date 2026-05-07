@@ -40,21 +40,21 @@ const Spinner = () => (
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  const { isApproved, loading: approvalLoading } = useApproval();
 
-  if (loading || approvalLoading) return <Spinner />;
+  if (loading) return <Spinner />;
   if (!user) return <Navigate to="/login" replace />;
-  if (!isApproved) return <Navigate to="/pending" replace />;
+  // Approval gate is dead code: profiles.is_approved DEFAULT true means all users
+  // are auto-approved. Email verification is enforced at sign-in time in
+  // AuthContext.signIn (and DB-side via is_verified_user helper). See BUG-013.
   return <>{children}</>;
 };
 
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  const { isAdmin, isApproved, loading: approvalLoading } = useApproval();
+  const { isAdmin, loading: approvalLoading } = useApproval();
 
   if (loading || approvalLoading) return <Spinner />;
   if (!user) return <Navigate to="/login" replace />;
-  if (!isApproved) return <Navigate to="/pending" replace />;
   if (!isAdmin) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
@@ -89,6 +89,7 @@ const AppRoutes = () => {
         <Route path="/more" element={<ProtectedRoute><MorePage /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
         <Route path="/install" element={<InstallPage />} />
+        <Route path="/feeds" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <BottomNav />

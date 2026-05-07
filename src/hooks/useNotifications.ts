@@ -55,13 +55,18 @@ export const useNotifications = () => {
 
   const markAllRead = useCallback(async () => {
     if (!user) return;
+    // BUG-038: leave message-type notifications unread; the messages tab has its
+    // own indicator and clearing them here would silently zero out that count.
     await supabase
       .from("notifications")
       .update({ read_at: new Date().toISOString() })
       .eq("user_id", user.id)
-      .is("read_at", null);
+      .is("read_at", null)
+      .neq("type", "message");
     setUnreadCount(0);
-    setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
+    setNotifications(prev => prev.map(n => (
+      n.type === "message" ? n : { ...n, read_at: n.read_at || new Date().toISOString() }
+    )));
   }, [user]);
 
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);

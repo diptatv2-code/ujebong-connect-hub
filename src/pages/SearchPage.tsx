@@ -25,11 +25,22 @@ const SearchPage = () => {
 
   useEffect(() => {
     const fetchAll = async () => {
-      const [{ data: p }, { data: g }] = await Promise.all([
-        supabase.from("profiles").select("id, name, avatar_url, bio, last_active_at").neq("id", user?.id ?? ""),
+      if (!user) return;
+      const [{ data: p }, { data: g }, { data: blocks }] = await Promise.all([
+        supabase.from("profiles").select("id, name, avatar_url, bio, last_active_at").neq("id", user.id),
         supabase.from("groups").select("*"),
+        supabase
+          .from("blocked_users")
+          .select("blocked_id, blocker_id")
+          .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`),
       ]);
-      setProfiles(p || []);
+      // BUG-050: filter out anyone blocked by or blocking the current user.
+      const blockedIds = new Set<string>();
+      (blocks || []).forEach((b: { blocked_id: string; blocker_id: string }) => {
+        if (b.blocker_id !== user.id) blockedIds.add(b.blocker_id);
+        if (b.blocked_id !== user.id) blockedIds.add(b.blocked_id);
+      });
+      setProfiles((p || []).filter((profile) => !blockedIds.has(profile.id)));
       setGroups(g || []);
     };
     fetchAll();
@@ -40,7 +51,18 @@ const SearchPage = () => {
 
   const sendRequest = async (targetId: string) => {
     if (!user) return;
-    await supabase.from("friendships").insert({ requester_id: user.id, addressee_id: targetId });
+    const { error } = await supabase
+      .from("friendships")
+      .insert({ requester_id: user.id, addressee_id: targetId });
+    if (error) {
+      // BUG-049: don't claim success when the insert was a duplicate.
+      if (error.code === "23505") {
+        toast.error("Friend request already sent or you're already friends.");
+      } else {
+        toast.error("Failed to send friend request.");
+      }
+      return;
+    }
     toast.success("Friend request sent!");
   };
 

@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { Mic, Square, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "@/hooks/use-toast";
 
 interface VoiceRecorderProps {
   onRecordingComplete: (file: File) => void;
@@ -38,8 +39,13 @@ const VoiceRecorder = ({ onRecordingComplete, onCancel, compact = false }: Voice
       setIsRecording(true);
       setDuration(0);
       timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
-    } catch {
-      // Microphone permission denied
+    } catch (err) {
+      console.error("Mic permission error:", err);
+      toast({
+        title: "Microphone access denied",
+        description: "Please enable mic in your browser settings.",
+        variant: "destructive",
+      });
     }
   }, [onRecordingComplete]);
 

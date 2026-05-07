@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,6 +18,19 @@ interface Conversation {
   has_audio: boolean;
 }
 
+interface RawMessage {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  content: string | null;
+  image_url: string | null;
+  audio_url: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+const PAGE_LIMIT = 200;
+
 const MessagesPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -25,34 +38,36 @@ const MessagesPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const fetchConversations = async () => {
+  const profileCacheRef = useRef<Map<string, { name: string; avatar_url: string | null }>>(new Map());
+
+  const fetchConversations = useCallback(async () => {
     if (!user) return;
 
-    // Get all messages involving current user
+    // BUG-023: cap initial fetch to PAGE_LIMIT recent messages instead of pulling
+    // every message the user has ever sent or received.
     const { data: messages } = await supabase
       .from("messages")
-      .select("*")
+      .select("id, sender_id, receiver_id, content, image_url, audio_url, read_at, created_at")
       .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(PAGE_LIMIT);
 
     if (!messages) { setLoading(false); return; }
 
-    // Group by conversation partner
-    const convMap = new Map<string, { last: typeof messages[0]; unread: number }>();
-    for (const msg of messages) {
+    const convMap = new Map<string, { last: RawMessage; unread: number }>();
+    for (const msg of messages as RawMessage[]) {
       const partnerId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
-      if (!convMap.has(partnerId)) {
+      const existing = convMap.get(partnerId);
+      if (!existing) {
         convMap.set(partnerId, {
           last: msg,
           unread: msg.receiver_id === user.id && !msg.read_at ? 1 : 0,
         });
-      } else {
-        const existing = convMap.get(partnerId)!;
-        if (msg.receiver_id === user.id && !msg.read_at) existing.unread++;
+      } else if (msg.receiver_id === user.id && !msg.read_at) {
+        existing.unread++;
       }
     }
 
-    // Fetch profiles for all partners
     const partnerIds = Array.from(convMap.keys());
     if (partnerIds.length === 0) { setConversations([]); setLoading(false); return; }
 
@@ -61,9 +76,10 @@ const MessagesPage = () => {
       .select("id, name, avatar_url")
       .in("id", partnerIds);
 
-    const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+    const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+    profileMap.forEach((p, id) => profileCacheRef.current.set(id, { name: p.name, avatar_url: p.avatar_url }));
 
-    const convos: Conversation[] = partnerIds.map(pid => {
+    const convos: Conversation[] = partnerIds.map((pid) => {
       const { last, unread } = convMap.get(pid)!;
       const profile = profileMap.get(pid);
       return {
@@ -81,20 +97,74 @@ const MessagesPage = () => {
     convos.sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
     setConversations(convos);
     setLoading(false);
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchConversations();
-  }, [user]);
+  }, [fetchConversations]);
 
-  // Realtime subscription
+  // BUG-023: scope realtime subscription to messages addressed to this user
+  // (or sent by them) and patch the affected conversation in-place rather than
+  // refetching the entire list on every event.
   useEffect(() => {
     if (!user) return;
+
+    const upsertConversation = async (msg: RawMessage) => {
+      const partnerId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+      let profile = profileCacheRef.current.get(partnerId);
+      if (!profile) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, name, avatar_url")
+          .eq("id", partnerId)
+          .single();
+        if (data) {
+          profile = { name: data.name, avatar_url: data.avatar_url };
+          profileCacheRef.current.set(partnerId, profile);
+        }
+      }
+
+      setConversations((prev) => {
+        const existing = prev.find((c) => c.user_id === partnerId);
+        const isUnread = msg.receiver_id === user.id && !msg.read_at;
+        const next: Conversation = existing
+          ? {
+              ...existing,
+              last_message: msg.content || existing.last_message,
+              last_message_at: msg.created_at,
+              has_image: !!msg.image_url,
+              has_audio: !!msg.audio_url,
+              unread_count: existing.unread_count + (isUnread ? 1 : 0),
+            }
+          : {
+              user_id: partnerId,
+              name: profile?.name || "User",
+              avatar_url: profile?.avatar_url || null,
+              last_message: msg.content || "",
+              last_message_at: msg.created_at,
+              unread_count: isUnread ? 1 : 0,
+              has_image: !!msg.image_url,
+              has_audio: !!msg.audio_url,
+            };
+        const filtered = prev.filter((c) => c.user_id !== partnerId);
+        return [next, ...filtered].sort(
+          (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+        );
+      });
+    };
+
     const channel = supabase
       .channel("messages-list")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
-        fetchConversations();
-      })
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `receiver_id=eq.${user.id}` },
+        (payload) => upsertConversation(payload.new as RawMessage)
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `sender_id=eq.${user.id}` },
+        (payload) => upsertConversation(payload.new as RawMessage)
+      )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -158,7 +228,11 @@ const MessagesPage = () => {
                   </span>
                 </div>
                 <p className={`truncate text-xs ${conv.unread_count > 0 ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
-                  {conv.has_audio && !conv.last_message ? "🎤 Voice message" : conv.has_image && !conv.last_message ? "📷 Photo" : conv.last_message || "📷 Photo"}
+                  {conv.has_audio && !conv.last_message
+                    ? "🎤 Voice message"
+                    : conv.has_image && !conv.last_message
+                    ? "📷 Photo"
+                    : conv.last_message || "(No messages yet)"}
                 </p>
               </div>
             </button>

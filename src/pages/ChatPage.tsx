@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -33,7 +33,7 @@ interface Profile {
 }
 
 // Component to display images via signed URLs
-const SignedImage = ({ path, className }: { path: string; className?: string }) => {
+const SignedImage = memo(({ path, className }: { path: string; className?: string }) => {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     if (path.startsWith("http")) {
@@ -46,12 +46,16 @@ const SignedImage = ({ path, className }: { path: string; className?: string }) 
   }, [path]);
   if (!src) return <div className={`${className} animate-pulse bg-muted rounded-lg min-h-[100px]`} />;
   return <img src={src} alt="Shared image" className={className} loading="lazy" />;
-};
+});
+SignedImage.displayName = "SignedImage";
 
 const ChatPage = () => {
   const { userId } = useParams<{ userId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const answerCallId = searchParams.get("answerCall");
+  const handledAnswerRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [partner, setPartner] = useState<Profile | null>(null);
   const [text, setText] = useState("");
@@ -93,8 +97,20 @@ const ChatPage = () => {
       .then(({ data }) => { if (data) setPartner(data); });
   }, [userId]);
 
+  // Auto-answer when navigating in from GlobalCallListener with ?answerCall=
+  useEffect(() => {
+    if (!partner || !answerCallId) return;
+    if (handledAnswerRef.current === answerCallId) return;
+    handledAnswerRef.current = answerCallId;
+    answerCall(answerCallId);
+    // Clear the query param so refresh doesn't try to answer again
+    const next = new URLSearchParams(searchParams);
+    next.delete("answerCall");
+    setSearchParams(next, { replace: true });
+  }, [partner, answerCallId, answerCall, searchParams, setSearchParams]);
+
   // Fetch messages
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     if (!user || !userId) return;
     const { data } = await supabase
       .from("messages")
@@ -106,16 +122,15 @@ const ChatPage = () => {
     setLoading(false);
     scrollToBottom();
 
-    // Mark unread messages as read
     if (data) {
       const unread = data.filter(m => m.receiver_id === user.id && !m.read_at).map(m => m.id);
       if (unread.length > 0) {
         supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unread).then(() => {});
       }
     }
-  };
+  }, [user, userId]);
 
-  useEffect(() => { fetchMessages(); }, [user, userId]);
+  useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
   // Realtime
   useEffect(() => {
@@ -154,6 +169,7 @@ const ChatPage = () => {
     if (!user || !userId || (!text.trim() && !imageFile && !audioFile)) return;
     setSending(true);
 
+    const trimmedContent = text.trim().slice(0, 5000);
     let image_url: string | null = null;
     let audio_url: string | null = null;
 
@@ -181,7 +197,7 @@ const ChatPage = () => {
     const { error } = await supabase.from("messages").insert({
       sender_id: user.id,
       receiver_id: userId,
-      content: text.trim(),
+      content: trimmedContent,
       image_url,
       audio_url,
     });
@@ -355,6 +371,7 @@ const ChatPage = () => {
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={handleKeyDown}
+            maxLength={5000}
             className="flex-1"
           />
           <Button

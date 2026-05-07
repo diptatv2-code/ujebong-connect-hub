@@ -7,6 +7,7 @@ import CreatePostDialog from "@/components/CreatePostDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "@/hooks/use-toast";
 
 export interface PostWithProfile {
   id: string;
@@ -109,15 +110,81 @@ const FeedsPage = () => {
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
-  // Realtime subscription
+  // Keep latest fetchPosts in a ref so realtime subscription doesn't re-create
+  // the channel every time fetchPosts identity changes (BUG-052).
+  const fetchPostsRef = useRef(fetchPosts);
+  useEffect(() => { fetchPostsRef.current = fetchPosts; }, [fetchPosts]);
+
+  // Realtime subscription — patch local state for likes instead of refetching
+  // the entire feed on every event (BUG-022).
   useEffect(() => {
+    if (!user) return;
     const channel = supabase
       .channel("posts-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => fetchPosts())
-      .on("postgres_changes", { event: "*", schema: "public", table: "post_likes" }, () => fetchPosts())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, () => {
+        // New posts: do a refetch (so we get the joined profile/likes/comments)
+        fetchPostsRef.current();
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "posts" }, (payload) => {
+        const oldRow = payload.old as { id?: string };
+        if (oldRow?.id) {
+          setPosts((prev) => prev.filter((p) => p.id !== oldRow.id));
+        }
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "post_likes" }, (payload) => {
+        const row = payload.new as { post_id: string; user_id: string; reaction_type?: string };
+        setPosts((prev) => prev.map((p) => {
+          if (p.id !== row.post_id) return p;
+          const r = row.reaction_type || "like";
+          const counts = { ...p.reaction_counts, [r]: (p.reaction_counts[r] || 0) + 1 };
+          const isMine = row.user_id === user.id;
+          return {
+            ...p,
+            like_count: p.like_count + 1,
+            reaction_counts: counts,
+            liked_by_me: isMine ? true : p.liked_by_me,
+            my_reaction: isMine ? r : p.my_reaction,
+          };
+        }));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "post_likes" }, (payload) => {
+        const row = payload.old as { post_id?: string; user_id?: string; reaction_type?: string };
+        if (!row.post_id) return;
+        setPosts((prev) => prev.map((p) => {
+          if (p.id !== row.post_id) return p;
+          const r = row.reaction_type || "like";
+          const counts = { ...p.reaction_counts, [r]: Math.max(0, (p.reaction_counts[r] || 0) - 1) };
+          const isMine = row.user_id === user.id;
+          return {
+            ...p,
+            like_count: Math.max(0, p.like_count - 1),
+            reaction_counts: counts,
+            liked_by_me: isMine ? false : p.liked_by_me,
+            my_reaction: isMine ? null : p.my_reaction,
+          };
+        }));
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "post_likes" }, (payload) => {
+        const row = payload.new as { post_id: string; user_id: string; reaction_type?: string };
+        const oldRow = payload.old as { reaction_type?: string };
+        setPosts((prev) => prev.map((p) => {
+          if (p.id !== row.post_id) return p;
+          const counts = { ...p.reaction_counts };
+          const oldR = oldRow.reaction_type || "like";
+          const newR = row.reaction_type || "like";
+          counts[oldR] = Math.max(0, (counts[oldR] || 0) - 1);
+          counts[newR] = (counts[newR] || 0) + 1;
+          const isMine = row.user_id === user.id;
+          return {
+            ...p,
+            reaction_counts: counts,
+            my_reaction: isMine ? newR : p.my_reaction,
+          };
+        }));
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchPosts]);
+  }, [user]);
 
   // Pull to refresh
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -149,27 +216,39 @@ const FeedsPage = () => {
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
 
+    let result;
     if (post.my_reaction === reactionType) {
-      await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", user.id);
+      result = await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", user.id);
     } else if (post.liked_by_me) {
-      await supabase.from("post_likes").update({ reaction_type: reactionType }).eq("post_id", postId).eq("user_id", user.id);
+      result = await supabase.from("post_likes").update({ reaction_type: reactionType }).eq("post_id", postId).eq("user_id", user.id);
     } else {
-      await supabase.from("post_likes").insert({ post_id: postId, user_id: user.id, reaction_type: reactionType });
+      result = await supabase.from("post_likes").insert({ post_id: postId, user_id: user.id, reaction_type: reactionType });
     }
+    if (result.error) {
+      toast({ title: "Action failed", description: "Please try again.", variant: "destructive" });
+    }
+    // Realtime subscription will sync local state from the DB write.
   };
 
   const handlePost = async (content: string, imageUrl?: string) => {
     if (!user) return;
     const trimmed = content.trim().slice(0, 5000);
     if (!trimmed && !imageUrl) return;
-    await supabase.from("posts").insert({ user_id: user.id, content: trimmed, image_url: imageUrl || null });
+    const { error } = await supabase.from("posts").insert({ user_id: user.id, content: trimmed, image_url: imageUrl || null });
+    if (error) {
+      toast({ title: "Failed to post", description: error.message, variant: "destructive" });
+    }
   };
 
   const handleComment = async (postId: string, content: string) => {
     if (!user) return;
     const trimmed = content.trim().slice(0, 2000);
     if (!trimmed) return;
-    await supabase.from("post_comments").insert({ post_id: postId, user_id: user.id, content: trimmed });
+    const { error } = await supabase.from("post_comments").insert({ post_id: postId, user_id: user.id, content: trimmed });
+    if (error) {
+      toast({ title: "Comment failed", description: error.message, variant: "destructive" });
+      return;
+    }
     fetchPosts();
   };
 

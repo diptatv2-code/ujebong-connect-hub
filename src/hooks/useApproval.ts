@@ -24,5 +24,31 @@ export const useApproval = () => {
     check();
   }, [user]);
 
+  // Realtime: react to admin approval/revoke without forcing logout-relogin (BUG-028)
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`approval-status:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${user.id}`,
+        },
+        (payload) => {
+          const next = payload.new as { is_approved?: boolean };
+          if (typeof next.is_approved === "boolean") {
+            setIsApproved(next.is_approved);
+          }
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   return { isApproved, isAdmin, loading };
 };

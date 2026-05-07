@@ -1,7 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 async function verifyHmac(userId: string, token: string, timestamp: string): Promise<boolean> {
-  const SECRET_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  // BUG-012: Prefer the dedicated APPROVAL_HMAC_SECRET so the service role key
+  // can be rotated without invalidating in-flight approval links. Fall back to
+  // SUPABASE_SERVICE_ROLE_KEY for backwards compatibility with existing links.
+  const SECRET_KEY = Deno.env.get("APPROVAL_HMAC_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",

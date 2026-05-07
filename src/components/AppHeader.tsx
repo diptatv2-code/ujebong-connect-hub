@@ -2,14 +2,14 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Bell, Search, Shield } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useApproval } from "@/hooks/useApproval";
-import { useNotifications } from "@/hooks/useNotifications";
+import { useUnreadNotifCount } from "@/hooks/useUnreadNotifCount";
 
 const AppHeader = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const { isAdmin } = useApproval();
-  const { unreadCount } = useNotifications();
+  const { unreadCount } = useUnreadNotifCount();
 
   if (["/login", "/signup", "/pending"].includes(location.pathname) || location.pathname.startsWith("/chat/")) return null;
 

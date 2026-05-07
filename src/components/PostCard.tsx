@@ -160,9 +160,14 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
 
   const handleDeletePost = async () => {
     if (!canDelete) return;
-    await supabase.from("post_likes").delete().eq("post_id", post.id);
-    await supabase.from("post_comments").delete().eq("post_id", post.id);
-    await supabase.from("posts").delete().eq("id", post.id);
+    // BUG-031: posts has ON DELETE CASCADE on post_likes/post_comments — let
+    // the DB handle the cascade in a single statement so a partial failure
+    // can't leave dangling rows.
+    const { error } = await supabase.from("posts").delete().eq("id", post.id);
+    if (error) {
+      toast({ title: "Failed to delete post", description: error.message, variant: "destructive" });
+      return;
+    }
     onDelete?.(post.id);
     setShowMenu(false);
     toast({ title: "Post deleted" });
@@ -196,13 +201,24 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
     toast({ title: "Comment reported" });
   };
 
+  const longPressActivated = useRef(false);
+
   const handleLongPressStart = () => {
-    reactionTimeout.current = setTimeout(() => setShowReactions(true), 500);
+    longPressActivated.current = false;
+    reactionTimeout.current = setTimeout(() => {
+      longPressActivated.current = true;
+      setShowReactions(true);
+    }, 500);
   };
   const handleLongPressEnd = () => {
     if (reactionTimeout.current) clearTimeout(reactionTimeout.current);
   };
   const handleQuickTap = () => {
+    // BUG-046: suppress the click that fires after a long press completes.
+    if (longPressActivated.current) {
+      longPressActivated.current = false;
+      return;
+    }
     if (showReactions) return;
     onReaction(post.id, "like");
   };
@@ -316,7 +332,9 @@ const PostCard = ({ post, onReaction, onComment, onDelete, currentUserId }: Post
           <MessageCircle size={18} /> Comment
         </button>
         <button onClick={() => {
-          const url = `${window.location.origin}/feeds`;
+          // BUG-025: there is no /feeds route — the feed is at /. We don't yet
+          // have a per-post permalink, so share the home page.
+          const url = `${window.location.origin}/`;
           if (navigator.share) {
             navigator.share({ title: post.profiles?.name || "Post", text: post.content?.slice(0, 100), url }).catch(() => {});
           } else {

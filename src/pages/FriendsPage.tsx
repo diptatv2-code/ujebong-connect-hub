@@ -81,12 +81,30 @@ const FriendsPage = () => {
     );
 
   const sendRequest = async (targetId: string) => {
-    await supabase.from("friendships").insert({ requester_id: user!.id, addressee_id: targetId });
+    const { error } = await supabase
+      .from("friendships")
+      .insert({ requester_id: user!.id, addressee_id: targetId });
+    if (error) {
+      // BUG-049: differentiate duplicate-request error so we don't lie to the user.
+      if (error.code === "23505") {
+        toast.error("Friend request already sent or you're already friends.");
+      } else {
+        toast.error("Failed to send friend request.");
+      }
+      return;
+    }
     toast.success("Friend request sent!");
   };
 
   const acceptRequest = async (friendshipId: string) => {
-    await supabase.from("friendships").update({ status: "accepted" }).eq("id", friendshipId);
+    const { error } = await supabase
+      .from("friendships")
+      .update({ status: "accepted" })
+      .eq("id", friendshipId);
+    if (error) {
+      toast.error("Failed to accept request.");
+      return;
+    }
     toast.success("Friend request accepted!");
   };
 
